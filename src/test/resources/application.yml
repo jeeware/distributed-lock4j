@@ -1,0 +1,11 @@
+cloud:
+  lock:
+    refresh-lock-interval: 1000
+    dead-lock-timeout: 5000
+    jdbc:
+      create-schema: true
+
+spring:
+  mongodb:
+    embedded:
+      version: 3.6.5

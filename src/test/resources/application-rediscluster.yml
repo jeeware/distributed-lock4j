@@ -1,0 +1,13 @@
+cloud:
+  lock:
+    refresh-lock-interval: 1000
+    dead-lock-timeout: 5000
+
+spring:
+  redis:
+    cluster:
+      nodes:
+        - localhost:${master1.port}
+        - localhost:${replica1.port}
+        - localhost:${master2.port}
+        - localhost:${replica2.port}
