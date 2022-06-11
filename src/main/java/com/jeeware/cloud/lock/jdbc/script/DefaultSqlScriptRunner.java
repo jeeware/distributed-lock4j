@@ -17,7 +17,6 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,9 +27,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Builder
-@RequiredArgsConstructor
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultSqlScriptRunner implements SqlScriptRunner {
 
@@ -39,19 +38,32 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
     @NonNull
     private DataSource dataSource;
 
+    @Builder.Default
     private boolean continueOnError = true;
 
+    @NonNull
     @Builder.Default
     private String separator = ";;";
 
+    @NonNull
     @Builder.Default
     private String commentPrefix = "--";
 
+    @NonNull
     @Builder.Default
     private String blockCommentStartDelimiter = "/*";
 
+    @NonNull
     @Builder.Default
     private String blockCommentEndDelimiter = "*/";
+
+    @NonNull
+    @Builder.Default
+    private Context context = Context.IDENTITY;
+
+    public DefaultSqlScriptRunner(DataSource dataSource) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource is null");
+    }
 
     @Override
     public void runScripts(List<SqlScript> scripts) {
@@ -60,7 +72,7 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
 
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (SqlScript script : scripts) {
-                for (String sql : splitToSqlStatements(script.getScriptAsString())) {
+                for (String sql : splitToSqlStatements(context.resolve(script.getScriptAsString()))) {
                     statementNumber++;
                     execute(statement, sql);
                 }
@@ -77,32 +89,25 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
         StringBuilder sb = new StringBuilder(64);
         boolean inSingleQuote = false;
         boolean inDoubleQuote = false;
-//        boolean inBacktickQuote = false;
         boolean inEscape = false;
         char[] scriptChars = script.toCharArray();
-        int i = 0;
 
-        while (i < scriptChars.length) {
+        for (int i = 0; i < scriptChars.length; i++) {
             char c = scriptChars[i];
-            boolean skip = false; //
             if (inEscape) {
                 inEscape = false;
                 sb.append(c);
-                skip = true;
-//                continue;
-            } else if (c == '\\') { // MySQL style escapes
+                continue;
+            }
+            if (c == '\\') { // MySQL style escapes
                 inEscape = true;
                 sb.append(c);
-                skip = true;
-//                continue;
-            } else if (!inDoubleQuote && (c == '\'')) {
+                continue;
+            }
+            if (!inDoubleQuote && (c == '\'')) {
                 inSingleQuote = !inSingleQuote;
             } else if (!inSingleQuote && (c == '"')) {
                 inDoubleQuote = !inDoubleQuote;
-            }
-            if (skip) {
-                sb.append(c);
-                continue;
             }
             if (!inSingleQuote && !inDoubleQuote) {
                 if (script.startsWith(separator, i)) {
@@ -112,13 +117,13 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
                         sb = new StringBuilder(64);
                     }
                     i += separator.length();
-//                    continue;
+                    continue;
                 } else if (script.startsWith(commentPrefix, i)) {
                     // Skip over any content from the start of the comment to the EOL
                     int indexOfNextNewline = script.indexOf('\n', i);
                     if (indexOfNextNewline > i) {
                         i = indexOfNextNewline;
-//                        continue;
+                        continue;
                     } else {
                         // If there's no EOL, we must be at the end of the script, so stop here.
                         break;
@@ -142,7 +147,6 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
                 }
             }
             sb.append(c);
-            i++;
         }
 
         if (StringUtils.isNotBlank(sb)) {
@@ -165,33 +169,5 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
             }
         }
     }
-
-    List<String> split2(String script) {
-        List<String> statements = new ArrayList<>();
-        StringBuilder sb = new StringBuilder(64);
-        final char[] scriptChars = script.toCharArray();
-        final int length = scriptChars.length;
-        int i = 0;
-        char currentQuoteChar = 0;
-
-        while (i < length) {
-            char currentChar = scriptChars[i];
-            if (currentQuoteChar == 0) {
-                switch (currentChar) {
-                    case '"':
-                    case '\'':
-                    case '`':
-                        currentQuoteChar = currentChar;
-                        break;
-                    case '\\':
-                        i++;
-                }
-            }
-            sb.append(currentChar);
-            i++;
-        }
-        return statements;
-    }
-
 
 }

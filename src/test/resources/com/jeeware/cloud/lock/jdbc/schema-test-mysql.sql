@@ -6,10 +6,10 @@ CREATE TABLE IF NOT EXISTS `LOCKS` -- this comment line should be ignored when e
     locked_at         BIGINT,
     lock_heartbeat_at BIGINT,
     unlocked_at       BIGINT,
-    locked_by         VARCHAR(255) /* fkjsqfkljsslkjfglksdjg */
+    locked_by         VARCHAR(255) /* which instance has acquired lock */
 );;
 
-SET GLOBAL log_bin_trust_function_creators = ON;; -- ignore sqklfjqlskfjqslkjfqlkjq
+SET GLOBAL log_bin_trust_function_creators = ON;; -- ignore set global
 
 DROP FUNCTION IF EXISTS `locks__get_lock`;;
 
@@ -35,4 +35,4 @@ BEGIN
     RETURN modified_count;
 END;;
 
-/*SET GLOBAL log_bin_trust_function_creators = OFF;;*/
+SET GLOBAL log_bin_trust_function_creators = OFF;;

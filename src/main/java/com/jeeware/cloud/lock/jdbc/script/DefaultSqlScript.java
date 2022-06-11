@@ -30,13 +30,13 @@ public final class DefaultSqlScript implements SqlScript {
 
     private final String path;
 
-    public DefaultSqlScript(String script, String path) {
-        this.script = Validate.notBlank(script, "script can not be blank");
-        this.path = path;
-    }
-
     public DefaultSqlScript(String path, InputStream inputStream, Charset charset) throws IOException {
         this(Utils.toString(inputStream, charset), path);
+    }
+
+    public DefaultSqlScript(String script, String path) {
+        this.script = Validate.notEmpty(script, "script can not be empty");
+        this.path = path;
     }
 
     @Override

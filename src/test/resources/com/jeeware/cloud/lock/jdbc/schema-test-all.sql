@@ -1,5 +1,5 @@
 -- this comment line should be ignored when execute script runner
-CREATE TABLE IF NOT EXISTS LOCKS -- XXXX ZZZZZ
+CREATE TABLE IF NOT EXISTS LOCKS -- create table LOCKS if and only if it not exist
 (
     id                VARCHAR(255) NOT NULL PRIMARY KEY,
     state             NUMERIC(1),

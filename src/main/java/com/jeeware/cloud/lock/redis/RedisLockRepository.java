@@ -155,7 +155,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
                 if (!containsAllCharsOf(NOTIFY_KEYSPACE_FEATURES, features)) {
                     final String reply = connection.configSet(NOTIFY_KEYSPACE_EVENTS, NOTIFY_KEYSPACE_FEATURES);
-                    if ("OK".equals(reply)) {
+                    if ("OK" .equals(reply)) {
                         logger.info("Successfully set configuration: {}", NOTIFY_KEYSPACE_EVENTS);
                     } else {
                         logger.warn("Error when set configuration: {} => reply={}", NOTIFY_KEYSPACE_EVENTS, reply);
@@ -167,7 +167,8 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
                 connection.pSubscribe(this, pattern);
                 // block current thread until close
                 latch.await();
-            } catch (Exception e) {
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 logger.error("Unexpected error: {}", e.getMessage(), e);
                 close();
             }
