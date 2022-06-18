@@ -1,7 +1,7 @@
 ### Presentation
 A distributed lock implementation based on a shared SQL or NoSQL database.
 
-This framework can be used in a Spring Boot or vanilla applications (i.e. without Spring)
+This library can be used in a Spring Boot or vanilla applications (i.e. without Spring)
 
 A Spring Boot Auto-configurer is provided to ease its use.
 
@@ -48,12 +48,15 @@ cloud:
 ```
 
 Actually accepted databases are:
-1. MongoDB
-2. PostgresSQL
-3. HSQLDB
-4. MySQL
-5. H2 
-6. Oracle
+- NoSQL Databases:
+  1. MongoDB
+  2. Redis
+- SQL Databases:
+  1. PostgresSQL
+  2. Oracle
+  3. MySQL
+  4. HSQLDB
+  5. H2
 
 ### Minimum Requirement
 * JDK: 8

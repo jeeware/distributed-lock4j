@@ -1,8 +1,33 @@
+/*
+ * Copyright 2020-2022 Hichem BOURADA and other authors.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.jeeware.cloud.lock.redis;
 
-import static java.util.Arrays.asList;
-import static java.util.Collections.singletonList;
-import static java.util.Objects.requireNonNull;
+import com.jeeware.cloud.lock.LockRepository;
+import com.jeeware.cloud.lock.redis.connection.MessageListener;
+import com.jeeware.cloud.lock.redis.connection.RedisConnection;
+import com.jeeware.cloud.lock.redis.connection.RedisConnectionFactory;
+import com.jeeware.cloud.lock.redis.connection.lettuce.LettuceConnectionFactory;
+import com.jeeware.cloud.lock.redis.script.DefaultRedisLockScripts;
+import com.jeeware.cloud.lock.redis.script.RedisLockScripts;
+import com.jeeware.cloud.lock.redis.script.RedisScript;
+import com.jeeware.cloud.lock.redis.script.ScriptExecutor;
+import com.jeeware.cloud.lock.support.AbstractWatchable;
+import com.jeeware.cloud.lock.support.AbstractWatchableLockRepository;
+import io.lettuce.core.RedisURI;
+import org.apache.commons.lang3.ArrayUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -14,26 +39,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.jeeware.cloud.lock.LockRepository;
-import com.jeeware.cloud.lock.redis.connection.RedisConnection;
-import com.jeeware.cloud.lock.redis.connection.RedisConnectionFactory;
-import com.jeeware.cloud.lock.redis.script.DefaultRedisLockScripts;
-import com.jeeware.cloud.lock.redis.script.RedisLockScripts;
-import com.jeeware.cloud.lock.redis.script.RedisScript;
-import com.jeeware.cloud.lock.redis.script.ScriptExecutor;
-import org.apache.commons.lang3.ArrayUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.jeeware.cloud.lock.redis.connection.MessageListener;
-import com.jeeware.cloud.lock.redis.connection.lettuce.LettuceConnectionFactory;
-import com.jeeware.cloud.lock.support.AbstractWatchable;
-import com.jeeware.cloud.lock.support.AbstractWatchableLockRepository;
-import io.lettuce.core.RedisURI;
+import static java.util.Arrays.asList;
+import static java.util.Collections.singletonList;
+import static java.util.Objects.requireNonNull;
 
 /**
  * {@link LockRepository} Redis implementation.
- * 
+ *
  * @author hbourada
  */
 public class RedisLockRepository extends AbstractWatchableLockRepository {
@@ -69,16 +81,6 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    public boolean acquireLock(String lockId, String instanceId) {
-        final RedisLockKey lockKey = new RedisLockKey(lockPrefix, lockId, instanceId);
-        final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
-        final List<Object> args = asList(lockKey.getLockedAt(), expirationMillis);
-        final Long result = scriptExecutor.execute(acquireLock, keys, args);
-
-        return ACQUIRED == result;
-    }
-
-    @Override
     public void refreshActiveLocks(String instanceId) {
         final RedisLockKey lockKey = new RedisLockKey(lockPrefix, null, instanceId);
         final List<String> keys = singletonList(lockKey.getLockedBy());
@@ -88,6 +90,16 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         if (count > 0) {
             LOGGER.debug("{} active lock(s) was refreshed for instanceId: {}", count, instanceId);
         }
+    }
+
+    @Override
+    public boolean acquireLock(String lockId, String instanceId) {
+        final RedisLockKey lockKey = new RedisLockKey(lockPrefix, lockId, instanceId);
+        final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
+        final List<Object> args = asList(lockKey.getLockedAt(), expirationMillis);
+        final Long result = scriptExecutor.execute(acquireLock, keys, args);
+
+        return ACQUIRED == result;
     }
 
     @Override
@@ -151,14 +163,15 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
                 });
                 // add notify keyspace config if necessary
                 final Map<String, String> notifyConfig = connection.configGet(NOTIFY_KEYSPACE_EVENTS);
-                final String features = notifyConfig.values().stream().findFirst().orElse(null);
-
-                if (!containsAllCharsOf(NOTIFY_KEYSPACE_FEATURES, features)) {
-                    final String reply = connection.configSet(NOTIFY_KEYSPACE_EVENTS, NOTIFY_KEYSPACE_FEATURES);
-                    if ("OK" .equals(reply)) {
-                        logger.info("Successfully set configuration: {}", NOTIFY_KEYSPACE_EVENTS);
+                String features = notifyConfig.values().stream().findFirst().orElse("");
+                final String missingNotifyFeatures = getMissingNotifyFeatures(features);
+                if (!missingNotifyFeatures.isEmpty()) {
+                    features += missingNotifyFeatures;
+                    final String reply = connection.configSet(NOTIFY_KEYSPACE_EVENTS, features);
+                    if ("OK".equals(reply)) {
+                        logger.info("Successfully set configuration {} with {}", NOTIFY_KEYSPACE_EVENTS, features);
                     } else {
-                        logger.warn("Error when set configuration: {} => reply={}", NOTIFY_KEYSPACE_EVENTS, reply);
+                        logger.warn("Error when set configuration {} to {} => reply={}", NOTIFY_KEYSPACE_EVENTS, features, reply);
                     }
                 }
 
@@ -174,17 +187,18 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
             }
         }
 
-        boolean containsAllCharsOf(String source, String target) {
-            if (target == null || target.isEmpty()) {
-                return false;
+        String getMissingNotifyFeatures(String features) {
+            if (features.isEmpty()) {
+                return NOTIFY_KEYSPACE_FEATURES;
             }
-            final char[] sourceChars = source.toCharArray();
-            for (char ch : target.toCharArray()) {
-                if (!ArrayUtils.contains(sourceChars, ch)) {
-                    return false;
+            char[] notifyFeaturesChars = NOTIFY_KEYSPACE_FEATURES.toCharArray();
+            StringBuilder missingChars = new StringBuilder(notifyFeaturesChars.length);
+            for (char ch : features.toCharArray()) {
+                if (!ArrayUtils.contains(notifyFeaturesChars, ch)) {
+                    missingChars.append(ch);
                 }
             }
-            return true;
+            return missingChars.toString();
         }
 
         @Override
@@ -228,30 +242,31 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         // JedisPool());
         final int nLocks = 10;
         final long refreshSec = 2;
-        final Duration timout = Duration.ofSeconds(10);
+        final Duration timeout = Duration.ofSeconds(10);
         long waitSec = 15;
 
         try (LettuceConnectionFactory factory = LettuceConnectionFactory.createStandalone(RedisURI.create("localhost", 6379));
-                // LettuceConnectionFactory factory =
-                // LettuceConnectionFactory.createCluster(ClientResources.create(),
-                // RedisURI.create("localhost", 6379),
-                // RedisURI.create("localhost", 16379));
-                RedisLockRepository repository = new RedisLockRepository(new DefaultRedisLockScripts(), factory, timout, "lock")) {
+             // LettuceConnectionFactory factory =
+             // LettuceConnectionFactory.createCluster(ClientResources.create(),
+             // RedisURI.create("localhost", 6379),
+             // RedisURI.create("localhost", 16379));
+             RedisLockRepository repository = new RedisLockRepository(new DefaultRedisLockScripts(), factory, timeout, "lock")) {
             repository.start();
             final String instanceId = UUID.randomUUID().toString();
             scheduler.scheduleWithFixedDelay(() -> repository.refreshActiveLocks(instanceId), refreshSec, refreshSec, TimeUnit.SECONDS);
             for (int i = 0; i < nLocks; i++) {
-                final String lockId = "lock_test" + i;
+                final String lockId = "lock_test" + i / 2;
                 final boolean acquired = repository.acquireLock(lockId, instanceId);
                 LOGGER.debug("{} acquired={}", lockId, acquired);
             }
             TimeUnit.SECONDS.sleep(waitSec);
             for (int i = 0; i < nLocks; i++) {
-                repository.releaseLock("lock_test" + i, instanceId);
+                repository.releaseLock("lock_test" + i / 2, instanceId);
             }
         } finally {
             scheduler.shutdownNow();
             executor.shutdownNow();
         }
     }
+
 }

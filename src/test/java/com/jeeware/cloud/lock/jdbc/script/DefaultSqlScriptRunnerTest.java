@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Hichem BOURADA and other authors.
+ * Copyright 2020-2022-2022 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -62,7 +62,7 @@ class DefaultSqlScriptRunnerTest {
         when(dataSource.getConnection()).thenReturn(connection);
         when(connection.createStatement()).thenReturn(statement);
         when(statement.execute(any())).then(i -> statements.add(i.getArgument(0)));
-        scriptRunner = new DefaultSqlScriptRunner(dataSource);
+        scriptRunner = DefaultSqlScriptRunner.builder().dataSource(dataSource).build();
     }
 
     @Test

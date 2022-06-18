@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Hichem BOURADA and other authors.
+ * Copyright 2020-2022-2022 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -60,10 +60,6 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
     @NonNull
     @Builder.Default
     private Context context = Context.IDENTITY;
-
-    public DefaultSqlScriptRunner(DataSource dataSource) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource is null");
-    }
 
     @Override
     public void runScripts(List<SqlScript> scripts) {
