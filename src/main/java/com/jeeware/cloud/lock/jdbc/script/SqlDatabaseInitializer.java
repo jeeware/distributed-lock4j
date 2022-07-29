@@ -13,6 +13,11 @@
 
 package com.jeeware.cloud.lock.jdbc.script;
 
+/**
+ * Interface representing how to initialize an SQL database schemas.
+ *
+ * @author hbourada
+ */
 public interface SqlDatabaseInitializer {
 
     void initializeSchemas();

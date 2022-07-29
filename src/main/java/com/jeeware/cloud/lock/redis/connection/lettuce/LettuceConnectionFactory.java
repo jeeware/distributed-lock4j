@@ -82,6 +82,11 @@ public class LettuceConnectionFactory implements RedisConnectionFactory, AutoClo
         return new LettuceConnection(this);
     }
 
+    @Override
+    public boolean isRedisCluster() {
+        return redisClient instanceof RedisClusterClient;
+    }
+
     protected StatefulRedisPubSubConnection<String, String> getPubSubConnection() {
         if (redisClient instanceof RedisClient) {
             return ((RedisClient) redisClient).connectPubSub();

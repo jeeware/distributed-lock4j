@@ -42,7 +42,7 @@ import lombok.ToString;
 
 /**
  * {@link LockRepository} implementation based on a relational database table.
- * 
+ *
  * @author hbourada
  * @version 1.1
  */
@@ -69,10 +69,6 @@ public class JdbcLockRepository implements LockRepository {
     private final String unlockDeadLocksSql;
 
     private final String findDeadLocksSql;
-
-    public JdbcLockRepository(DataSource dataSource, SQLDialect dialect, String tableName, String functionName) {
-        this(dataSource, dialect, new SQLRuntimeExceptionTranslator(), tableName, functionName);
-    }
 
     public JdbcLockRepository(DataSource dataSource, SQLDialect dialect,
             ExceptionTranslator<SQLException, ? extends RuntimeException> translator,

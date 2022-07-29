@@ -16,19 +16,43 @@ package com.jeeware.cloud.lock.spring.redis;
 import com.jeeware.cloud.lock.redis.connection.RedisConnection;
 import com.jeeware.cloud.lock.redis.connection.RedisConnectionFactory;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
-@RequiredArgsConstructor
+import java.util.Objects;
+
 public class RedisConnectionFactoryAdapter implements RedisConnectionFactory {
 
-    @NonNull
     private final org.springframework.data.redis.connection.RedisConnectionFactory redisConnectionFactory;
 
     private final int database;
 
+    private final boolean redisCluster;
+
+    public RedisConnectionFactoryAdapter(@NonNull org.springframework.data.redis.connection.RedisConnectionFactory redisConnectionFactory, int database) {
+        this.redisConnectionFactory = Objects.requireNonNull(redisConnectionFactory, "redisConnectionFactory is null");
+        this.database = database;
+        this.redisCluster = isRedisCluster(redisConnectionFactory);
+    }
+
+    private static boolean isRedisCluster(org.springframework.data.redis.connection.RedisConnectionFactory redisConnectionFactory) {
+        if (redisConnectionFactory instanceof JedisConnectionFactory) {
+            return ((JedisConnectionFactory) redisConnectionFactory).isRedisClusterAware();
+        }
+        if (redisConnectionFactory instanceof LettuceConnectionFactory) {
+            return ((LettuceConnectionFactory) redisConnectionFactory).isClusterAware();
+        }
+        throw new IllegalArgumentException("Unsupported Redis connection factory type: " + redisConnectionFactory);
+    }
+
     @Override
     public RedisConnection getConnection() {
         return new RedisConnectionAdapter(redisConnectionFactory.getConnection(), database);
+    }
+
+    @Override
+    public boolean isRedisCluster() {
+        return this.redisCluster;
     }
 
 }

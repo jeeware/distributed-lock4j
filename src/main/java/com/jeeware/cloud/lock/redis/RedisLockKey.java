@@ -33,10 +33,18 @@ public final class RedisLockKey {
     private final Instant lockedAt;
 
     public RedisLockKey(String prefix, String id, String instanceId) {
-        final String prefixSeparator = StringUtils.isEmpty(prefix) ? "" : prefix + SEPARATOR;
-        this.id = prefixSeparator + id;
+        this(prefix, id, instanceId, false);
+    }
+
+    public RedisLockKey(String prefix, String id, String instanceId, boolean redisCluster) {
+        final String prefixSeparator = StringUtils.isEmpty(prefix) ? "" :  prefix + SEPARATOR;
         this.lockedBy = prefixSeparator + LOCKED_BY_FIELD + SEPARATOR + instanceId;
+        this.id = prefixSeparator + clusterKeySlot(redisCluster, this.lockedBy) + id;
         this.lockedAt = Instant.now();
+    }
+
+    private static String clusterKeySlot(boolean redisCluster, String key) {
+        return redisCluster ? '{' + key + '}' : "";
     }
 
 }

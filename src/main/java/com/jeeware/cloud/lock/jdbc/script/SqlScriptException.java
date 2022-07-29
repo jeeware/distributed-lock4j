@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022-2022 Hichem BOURADA and other authors.
+ * Copyright 2020-2022 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -17,13 +17,13 @@ import com.jeeware.cloud.lock.jdbc.SQLRuntimeException;
 
 import java.sql.SQLException;
 
-public class ScriptException extends SQLRuntimeException {
+public class SqlScriptException extends SQLRuntimeException {
 
-    public ScriptException(String message, SQLException cause) {
+    public SqlScriptException(String message, SQLException cause) {
         super(message, cause);
     }
 
-    public ScriptException(SQLException e) {
+    public SqlScriptException(SQLException e) {
         super(e);
     }
 }

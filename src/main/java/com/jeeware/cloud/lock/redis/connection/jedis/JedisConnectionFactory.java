@@ -43,6 +43,11 @@ public abstract class JedisConnectionFactory implements RedisConnectionFactory {
             return new JedisConnection(new JedisCommandsImpl(jedisPool.getResource()));
         }
 
+        @Override
+        public boolean isRedisCluster() {
+            return false;
+        }
+
     }
 
     @RequiredArgsConstructor
@@ -54,6 +59,11 @@ public abstract class JedisConnectionFactory implements RedisConnectionFactory {
         @Override
         public JedisConnection getConnection() {
             return new JedisConnection(new JedisClusterCommandsImpl(jedisCluster));
+        }
+
+        @Override
+        public boolean isRedisCluster() {
+            return true;
         }
 
     }

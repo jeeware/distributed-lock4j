@@ -47,6 +47,9 @@ class JdbcInitializingLockRepositoryTest {
 
     @Test
     void new_JdbcInitializingLockRepository_should_create_schema() {
-        new JdbcInitializingLockRepository(dataSource, SQLDialects.MYSQL, "lock", "get_lock");
+        JdbcInitializingLockRepository lockRepository = new JdbcInitializingLockRepository(dataSource, SQLDialects.MYSQL, "lock", "get_lock");
+        lockRepository.initialize();
+
+
     }
 }

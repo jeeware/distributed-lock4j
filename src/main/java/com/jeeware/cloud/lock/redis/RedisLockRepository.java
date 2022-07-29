@@ -82,7 +82,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
     @Override
     public void refreshActiveLocks(String instanceId) {
-        final RedisLockKey lockKey = new RedisLockKey(lockPrefix, null, instanceId);
+        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, null, instanceId);
         final List<String> keys = singletonList(lockKey.getLockedBy());
         final List<Long> args = singletonList(expirationMillis);
         final Long count = scriptExecutor.execute(refreshActiveLocks, keys, args);
@@ -92,9 +92,13 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         }
     }
 
+    private RedisLockKey newRedisLockKey(String lockPrefix, String id, String instanceId) {
+        return new RedisLockKey(lockPrefix, id, instanceId, connectionFactory.isRedisCluster());
+    }
+
     @Override
     public boolean acquireLock(String lockId, String instanceId) {
-        final RedisLockKey lockKey = new RedisLockKey(lockPrefix, lockId, instanceId);
+        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, lockId, instanceId);
         final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
         final List<Object> args = asList(lockKey.getLockedAt(), expirationMillis);
         final Long result = scriptExecutor.execute(acquireLock, keys, args);
@@ -104,7 +108,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
     @Override
     public void releaseLock(String lockId, String instanceId) {
-        final RedisLockKey lockKey = new RedisLockKey(lockPrefix, lockId, instanceId);
+        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, lockId, instanceId);
         final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
         final Long count = scriptExecutor.execute(releaseLock, keys, null);
         LOGGER.debug("{} lock id: {} was released for instanceId: {}", count, lockId, instanceId);
@@ -203,12 +207,13 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
         @Override
         public void close() {
-            active = false;
-            latch.countDown();
             if (connection != null) {
                 connection.close();
+                connection = null;
+                active = false;
+                latch.countDown();
+                logger.debug("Successfully closed");
             }
-            logger.debug("Successfully closed");
         }
 
         @Override

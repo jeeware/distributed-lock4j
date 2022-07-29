@@ -32,6 +32,11 @@ public interface RedisConnectionFactory {
     RedisConnection getConnection();
 
     /**
+     * @return true if connection to a Redis cluster, false otherwise
+     */
+    boolean isRedisCluster();
+
+    /**
      * @return a Redis script executor to evaluate a script, default to
      *         {@link DefaultScriptExecutor}
      */

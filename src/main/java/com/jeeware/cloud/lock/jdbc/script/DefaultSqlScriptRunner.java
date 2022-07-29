@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022-2022 Hichem BOURADA and other authors.
+ * Copyright 2020-2022 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -27,7 +27,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -76,7 +75,7 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
             long elapsedTime = System.currentTimeMillis() - startTime;
             LOGGER.debug("Executed {} statements in {} ms.", statementNumber, elapsedTime);
         } catch (SQLException e) {
-            throw new ScriptException(e);
+            throw new SqlScriptException(e);
         }
     }
 
@@ -131,7 +130,7 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
                         i = indexOfCommentEnd + blockCommentEndDelimiter.length() - 1;
                         continue;
                     } else {
-                        throw new ScriptException("Missing block comment end delimiter: " + blockCommentEndDelimiter, null);
+                        throw new SqlScriptException("Missing block comment end delimiter: " + blockCommentEndDelimiter, null);
                     }
                 } else if (c == ' ' || c == '\r' || c == '\n' || c == '\t') {
                     // Avoid multiple adjacent whitespace characters
@@ -161,7 +160,7 @@ public class DefaultSqlScriptRunner implements SqlScriptRunner {
             if (continueOnError) {
                 LOGGER.warn("Error occurred in script {}", sql, ex);
             } else {
-                throw new ScriptException("Error occurred in script" + sql, ex);
+                throw new SqlScriptException("Error occurred in script: " + sql, ex);
             }
         }
     }

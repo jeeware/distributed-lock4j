@@ -31,8 +31,8 @@ import java.util.Map;
 
 /**
  * Default implementation for {@link SqlDatabaseInitializer} creates tables and functions if necessary for
- * known databases as Oracle and Postgres SQL, if the dialect is not already implemented by thr framework you can
- * provide your own sql scripts and a default or a custom {@link SqlScriptRunner}.
+ * known databases as Oracle, Postgres SQL ...etc. If the dialect is not already implemented by the library
+ * you can provide your own sql scripts and a default or a custom {@link SqlScriptRunner}.
  *
  * @author hbourada
  */

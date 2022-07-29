@@ -15,13 +15,22 @@ package com.jeeware.cloud.lock.jdbc;
 
 import com.jeeware.cloud.lock.ExceptionTranslator;
 import com.jeeware.cloud.lock.jdbc.script.DefaultSqlDatabaseInitializer;
+import com.jeeware.cloud.lock.jdbc.script.SqlDatabaseInitializer;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
+/**
+ * A {@link JdbcLockRepository} with an {@link #initialize()} method for creating lock database schemas.
+ *
+ * @author hbourada
+ */
 public class JdbcInitializingLockRepository extends JdbcLockRepository {
+
+    private SqlDatabaseInitializer databaseInitializer;
 
     public JdbcInitializingLockRepository(DataSource dataSource, SQLDialect dialect, String tableName, String functionName) {
         this(dataSource, dialect, new SQLRuntimeExceptionTranslator(), tableName, functionName);
@@ -30,8 +39,15 @@ public class JdbcInitializingLockRepository extends JdbcLockRepository {
     public JdbcInitializingLockRepository(DataSource dataSource, SQLDialect dialect,
                                           ExceptionTranslator<SQLException, ? extends RuntimeException> translator,
                                           String tableName, String functionName) {
+        this(dataSource, dialect, translator, tableName, functionName, new DefaultSqlDatabaseInitializer(dataSource, dialect,
+                createMap(tableName, functionName)));
+    }
+
+    public JdbcInitializingLockRepository(DataSource dataSource, SQLDialect dialect,
+                                          ExceptionTranslator<SQLException, ? extends RuntimeException> translator,
+                                          String tableName, String functionName, SqlDatabaseInitializer databaseInitializer) {
         super(dataSource, dialect, translator, tableName, functionName);
-        new DefaultSqlDatabaseInitializer(dataSource, dialect, createMap(tableName, functionName)).initializeSchemas();
+        this.databaseInitializer = Objects.requireNonNull(databaseInitializer, "databaseInitializer is null");
     }
 
     private static Map<String, String> createMap(String tableName, String functionName) {
@@ -39,6 +55,14 @@ public class JdbcInitializingLockRepository extends JdbcLockRepository {
         result.put("table", tableName);
         result.put("function", functionName);
         return result;
+    }
+
+    public final void initialize() {
+        if (databaseInitializer == null) {
+            throw new IllegalStateException("initialize was already called");
+        }
+        databaseInitializer.initializeSchemas();
+        databaseInitializer = null;
     }
 
 }

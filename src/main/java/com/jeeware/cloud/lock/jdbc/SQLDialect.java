@@ -15,7 +15,7 @@ package com.jeeware.cloud.lock.jdbc;
 
 /**
  * Locks table structure is :
- * 
+ *
  * <pre>
  * create table if not exists LOCKS (
  * 		id varchar(255) not null primary key,
@@ -26,10 +26,9 @@ package com.jeeware.cloud.lock.jdbc;
  * 		locked_by varchar(255)
  * )
  * </pre>
- * 
- * We use <tt>bigint</tt> to store epoch of timestamp for locked_at,
- * unlocked_at,.. columns which is optimal for performance
- * 
+ * We use <tt>bigint</tt> to store epoch of timestamp for locked_at, unlocked_at
+ * and lock_heartbeat_at columns which is optimal for performance
+ *
  * @author hbourada
  */
 public interface SQLDialect {

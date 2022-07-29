@@ -15,65 +15,89 @@ package com.jeeware.cloud.lock.redis.connection.jedis;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.Delegate;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisCluster;
+import redis.clients.jedis.JedisPubSub;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
-//TODO
 @RequiredArgsConstructor
 final class JedisClusterCommandsImpl implements JedisCommands {
 
-    @Delegate(types = JedisCommands.class, excludes = ExcludedCommands.class)
     @NonNull
     final JedisCluster jedisCluster;
 
     public List<String> configGet(String pattern) {
-//        jedisCluster.getConnectionFromSlot(0);
         return jedisCluster.getClusterNodes()
                 .values()
                 .stream()
-                .findFirst()
-                .map(pool -> {
+                .flatMap(pool -> {
                     try (Jedis jedis = pool.getResource()) {
-                        return jedis.configGet(pattern);
+                        return jedis.configGet(pattern).stream();
                     }
-                }).orElseThrow(() ->new IllegalStateException(""));
+                })
+                .distinct()
+                .collect(Collectors.toList());
 
     }
 
     @Override
     public String configSet(String parameter, String value) {
-        return null;
+        jedisCluster.getClusterNodes()
+                .values()
+                .forEach(pool -> {
+                    try (Jedis jedis = pool.getResource()) {
+                        jedis.configSet(parameter, value);
+                    }
+                });
+        return "OK";
+    }
+
+    @Override
+    public Object eval(String script, List<String> keys, List<String> args) {
+        return jedisCluster.eval(script, keys, args);
+    }
+
+    @Override
+    public Object evalsha(String sha1, List<String> keys, List<String> args) {
+        return jedisCluster.evalsha(sha1, keys, args);
     }
 
     @Override
     public String scriptLoad(String script) {
-        return null;
+        final AtomicReference<String> firstResult = new AtomicReference<>();
+        jedisCluster.getClusterNodes()
+                .values()
+                .forEach(pool -> {
+                    try (Jedis jedis = pool.getResource()) {
+                        firstResult.compareAndSet(null, jedis.scriptLoad(script));
+                    }
+                });
+        return firstResult.get();
     }
 
     @Override
     public int getDB() {
-        return 0;
+        return jedisCluster.getClusterNodes().values()
+                .stream()
+                .findFirst()
+                .map(pool -> {
+                    try (Jedis jedis = pool.getResource()) {
+                        return jedis.getDB();
+                    }
+                }).orElse(0);
+    }
+
+    @Override
+    public void psubscribe(JedisPubSub jedisPubSub, String... patterns) {
+        jedisCluster.psubscribe(jedisPubSub, patterns);
     }
 
     @Override
     public void close() {
-        // Do nothing as resource is not to be returned to a Pool
+        jedisCluster.close();
     }
 
-    private interface ExcludedCommands {
-
-        List<String> configGet(String pattern);
-
-        String configSet(String parameter, String value);
-
-        String scriptLoad(String script);
-
-        int getDB();
-
-        void close();
-
-    }
 }
