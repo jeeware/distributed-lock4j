@@ -14,6 +14,7 @@
 package com.jeeware.cloud.lock.redis;
 
 import com.jeeware.cloud.lock.LockRepository;
+import com.jeeware.cloud.lock.Watchable;
 import com.jeeware.cloud.lock.redis.connection.MessageListener;
 import com.jeeware.cloud.lock.redis.connection.RedisConnection;
 import com.jeeware.cloud.lock.redis.connection.RedisConnectionFactory;
@@ -122,7 +123,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    protected RedisWatchable createWatchable() {
+    protected Watchable createWatchable() {
         return new RedisWatchable();
     }
 

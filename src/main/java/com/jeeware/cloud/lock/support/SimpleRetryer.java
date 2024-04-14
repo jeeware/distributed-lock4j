@@ -48,7 +48,7 @@ public class SimpleRetryer implements Retryer {
     @Override
     public boolean retryFor(Exception e) {
         if (retryCount++ < maxRetry) {
-            final List<Class<?>> parentTypes = new ArrayList<>();
+            final List<Class<?>> childTypes = new ArrayList<>();
             Class<?> currentType = e.getClass();
             boolean retry = false;
 
@@ -58,13 +58,13 @@ public class SimpleRetryer implements Retryer {
                     retry = currentRetry;
                     break;
                 }
-                parentTypes.add(currentType);
+                childTypes.add(currentType);
                 currentType = currentType.getSuperclass();
             } while (currentType != Exception.class);
 
-            if (!parentTypes.isEmpty()) {
+            if (!childTypes.isEmpty()) {
                 final boolean r = retry;
-                parentTypes.forEach(type -> exceptionTypes.put(type, r));
+                childTypes.forEach(type -> exceptionTypes.put(type, r));
             }
 
             return retry;

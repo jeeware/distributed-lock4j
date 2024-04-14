@@ -24,6 +24,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,18 +40,25 @@ class JdbcInitializingLockRepositoryTest {
     @Mock
     Statement statement;
 
+    int statementNumber;
+
     @BeforeEach
     void setUp() throws SQLException {
         when(dataSource.getConnection()).thenReturn(connection);
         when(connection.createStatement()).thenReturn(statement);
+        when(statement.execute(anyString())).then(i -> {
+            statementNumber++;
+            return true;
+        });
     }
 
 
     @Test
-    void new_JdbcInitializingLockRepository_should_create_schema() {
+    void new_JdbcInitializingLockRepository_should_create_schema() throws SQLException {
         JdbcInitializingLockRepository lockRepository = new JdbcInitializingLockRepository(dataSource, SQLDialects.MYSQL, "lock", "get_lock");
+
         lockRepository.initialize();
 
-
+        assertThat(statementNumber).isEqualTo(5);
     }
 }

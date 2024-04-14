@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Watchable lock repository base implementation.
- * 
+ *
  * @author hbourada
  */
 public abstract class AbstractWatchableLockRepository implements WatchableLockRepository {
@@ -77,7 +77,7 @@ public abstract class AbstractWatchableLockRepository implements WatchableLockRe
             } catch (Exception e) {
                 Logger logger = LoggerFactory.getLogger(getClass());
                 logger.error("Error on close: {} => Interrupting watcher thread {}", e.getMessage(),
-                        Thread.currentThread().getName(), e);
+                        watcher.getName(), e);
                 watcher.interrupt();
             }
         }

@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import com.jeeware.cloud.lock.Watchable;
 import org.apache.commons.lang3.Validate;
 import org.bson.Document;
 import org.bson.codecs.configuration.CodecRegistry;
@@ -161,7 +162,7 @@ public class MongoLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    protected MongoWatchable createWatchable() {
+    protected Watchable createWatchable() {
         return new MongoWatchable(collection);
     }
 
