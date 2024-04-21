@@ -1,5 +1,5 @@
 cloud:
-  lock:
+  lock4j:
     refresh-lock-interval: 1000
     dead-lock-timeout: 5000
 

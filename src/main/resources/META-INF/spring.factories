@@ -1,2 +1,2 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-com.jeeware.cloud.lock.spring.autoconfigure.DistributedLockAutoConfiguration
+io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockAutoConfiguration
