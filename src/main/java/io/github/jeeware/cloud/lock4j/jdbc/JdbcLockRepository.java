@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2024 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -145,9 +145,6 @@ public class JdbcLockRepository implements LockRepository {
     private int execute(String task, String sql, Object... args) {
         try (Connection connection = dataSource.getConnection()) {
             boolean autoCommit = connection.getAutoCommit();
-            if (!autoCommit) {
-                connection.setAutoCommit(true);
-            }
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 for (int i = 0; i < args.length; i++) {
                     ps.setObject(i + 1, args[i]);
@@ -155,7 +152,7 @@ public class JdbcLockRepository implements LockRepository {
                 return ps.executeUpdate();
             } finally {
                 if (!autoCommit) {
-                    connection.setAutoCommit(false);
+                    connection.commit();
                 }
             }
         } catch (SQLException e) {
@@ -166,9 +163,6 @@ public class JdbcLockRepository implements LockRepository {
     private int executeCall(String sql, Object... args) {
         try (Connection connection = dataSource.getConnection()) {
             boolean autoCommit = connection.getAutoCommit();
-            if (!autoCommit) {
-                connection.setAutoCommit(true);
-            }
             try (CallableStatement cs = connection.prepareCall(sql)) {
                 cs.registerOutParameter(1, Types.INTEGER);
                 for (int i = 0; i < args.length; i++) {
@@ -178,7 +172,7 @@ public class JdbcLockRepository implements LockRepository {
                 return cs.getInt(1);
             } finally {
                 if (!autoCommit) {
-                    connection.setAutoCommit(false);
+                    connection.commit();
                 }
             }
         } catch (SQLException e) {
@@ -189,9 +183,6 @@ public class JdbcLockRepository implements LockRepository {
     private <T> List<T> executeQuery(Function<ResultSet, T> rowMapper, String sql, Object... args) {
         try (Connection connection = dataSource.getConnection()) {
             boolean autoCommit = connection.getAutoCommit();
-            if (!autoCommit) {
-                connection.setAutoCommit(true);
-            }
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 for (int i = 0; i < args.length; i++) {
                     ps.setObject(i + 1, args[i]);
@@ -205,7 +196,7 @@ public class JdbcLockRepository implements LockRepository {
                 return result;
             } finally {
                 if (!autoCommit) {
-                    connection.setAutoCommit(false);
+                    connection.commit();
                 }
             }
         } catch (SQLException e) {
