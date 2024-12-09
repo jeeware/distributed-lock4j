@@ -5,10 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.github.jeeware</groupId>
     <artifactId>distributed-lock4j</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <description>Distributed lock for cloud applications</description>
-    <name>Distributed Lock </name>
+    <name>Distributed Lock4j</name>
     <packaging>jar</packaging>
+    <url>https://github.com/jeeware/distributed-lock4j</url>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -17,15 +18,28 @@
         <relativePath/>
     </parent>
 
-    <contributors>
-        <contributor>
+    <scm>
+        <connection>scm:git:git@github.com:jeeware/distributed-lock4j.git</connection>
+        <developerConnection>scm:git:git@github.com:jeeware/distributed-lock4j.git</developerConnection>
+        <url>scm:git:git@github.com:jeeware/distributed-lock4j.git</url>
+    </scm>
+
+    <developers>
+        <developer>
             <name>Hichem BOURADA</name>
             <email>hichem.bourada@gmail.com</email>
             <roles>
                 <role>Lead Developer</role>
             </roles>
-        </contributor>
-    </contributors>
+        </developer>
+    </developers>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
 
     <properties>
         <java.version>1.8</java.version>
@@ -128,5 +142,81 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.6.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadoc</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-source</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.jreleaser</groupId>
+                        <artifactId>jreleaser-maven-plugin</artifactId>
+                        <version>1.3.1</version>
+                        <configuration>
+                            <jreleaser>
+                                <signing>
+                                    <active>ALWAYS</active>
+                                    <armored>true</armored>
+                                </signing>
+                                <deploy>
+                                    <maven>
+                                        <nexus2>
+                                            <maven-central>
+                                                <active>ALWAYS</active>
+                                                <url>https://s01.oss.sonatype.org/service/local</url>;
+                                                <closeRepository>false</closeRepository>
+                                                <releaseRepository>false</releaseRepository>
+                                                <stagingRepositories>target/staging-deploy</stagingRepositories>
+                                            </maven-central>
+                                        </nexus2>
+                                    </maven>
+                                </deploy>
+                            </jreleaser>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

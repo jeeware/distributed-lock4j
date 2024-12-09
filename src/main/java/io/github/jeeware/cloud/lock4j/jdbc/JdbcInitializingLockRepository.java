@@ -57,7 +57,7 @@ public class JdbcInitializingLockRepository extends JdbcLockRepository {
         return result;
     }
 
-    public final void initialize() {
+    public final synchronized void initialize() {
         if (databaseInitializer == null) {
             throw new IllegalStateException("initialize was already called");
         }

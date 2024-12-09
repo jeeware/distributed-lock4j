@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
 @UtilityClass
 public class Utils {
 
+    private static final int BUFFER_SIZE = 8192;
+
     public static List<String> toStringList(List<?> args) {
         return args == null || args.isEmpty() ? Collections.emptyList()
                 : args.stream()
@@ -49,8 +51,8 @@ public class Utils {
     public static String toString(InputStream stream, Charset charset) throws IOException {
         Objects.requireNonNull(stream, "stream is null");
         Objects.requireNonNull(charset, "charset is null");
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream(8192);
-        final byte[] buf = new byte[8192];
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream(BUFFER_SIZE);
+        final byte[] buf = new byte[BUFFER_SIZE];
         int count;
 
         while ((count = stream.read(buf)) != -1) {
