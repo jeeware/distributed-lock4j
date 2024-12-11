@@ -13,8 +13,6 @@
 
 package io.github.jeeware.cloud.lock4j.jdbc.script;
 
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -28,8 +26,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * This class is inspired mainly from spring jdbc {@link org.springframework.jdbc.datasource.init.ScriptUtils}.
+ *
+ * @author hbourada
+ */
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultSqlScriptRunner implements SqlScriptRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultSqlScriptRunner.class);

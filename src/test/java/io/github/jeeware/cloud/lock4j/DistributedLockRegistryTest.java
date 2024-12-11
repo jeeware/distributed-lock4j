@@ -54,7 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Tests for {@link DistributedLockRegistry} according to a specific
- * {@link LockRepository} implementation specified by {@code cloud.lock.type}
+ * {@link LockRepository} implementation specified by {@code cloud.lock4j.type}
  * property
  * 
  * @author hbourada

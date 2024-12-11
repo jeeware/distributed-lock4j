@@ -109,7 +109,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
     @Override
     public void releaseDeadLocks(long timeoutInterval) {
-        // Do nothing as Redis server removes expired lock keys automatically
+        // Do nothing as Redis server removes expired lock keys automatically,
         // and we are listening `del` and `expired` events to remove lock from
         // *:locked_by:* set members
     }
@@ -211,7 +211,6 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
         @Override
         public void onMessage(String pattern, String channel, String message) {
-            // logger.debug("onMessage {}, {}, {}", pattern, channel, message);
             if (message.startsWith(idPrefix) && (channel.endsWith("expired")
                     || channel.endsWith("del") && !message.startsWith(lockedByPrefix))) {
                 final String lockId = message.substring(idPrefix.length());
@@ -222,13 +221,11 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         @Override
         public void onPSubscribe(String pattern, long count) {
             active = true;
-//            logger.debug("onPSubscribe => active");
         }
 
         @Override
         public void onPUnsubscribe(String pattern, long count) {
             active = false;
-//            logger.debug("onPUnsubscribe => !active");
         }
 
     }

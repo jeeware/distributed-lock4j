@@ -50,9 +50,10 @@ import redis.clients.jedis.util.Pool;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "cloud.lock4j.type", havingValue = "redis", matchIfMissing = true)
+@SuppressWarnings("java:S6830")
 class RedisConfiguration {
 
-    // distinct bean name from auto-configured bean in RedisAutoConfiguration
+    // distinct bean name from autoconfigured bean in RedisAutoConfiguration
     static final String CONNECTION_FACTORY_BEAN_NAME = "distributedLock.redisConnectionFactory";
 
     @ConditionalOnMissingBean
@@ -92,7 +93,7 @@ class RedisConfiguration {
         @ConditionalOnMissingBean
         @Bean(CONNECTION_FACTORY_BEAN_NAME)
         public RedisConnectionFactory redisConnectionFactoryNative(ObjectProvider<Pool<Jedis>> jedisPools,
-                ObjectProvider<JedisCluster> jedisClusters) {
+                                                                   ObjectProvider<JedisCluster> jedisClusters) {
             Pool<Jedis> jedisPool = jedisPools.getIfUnique();
 
             if (jedisPool != null) {
@@ -122,7 +123,7 @@ class RedisConfiguration {
         @ConditionalOnBean(RedisURI.class)
         @Bean(CONNECTION_FACTORY_BEAN_NAME)
         public RedisConnectionFactory redisConnectionFactoryNative(Collection<RedisURI> redisURIs,
-                ObjectProvider<ClientResources> clientResources) {
+                                                                   ObjectProvider<ClientResources> clientResources) {
             ClientResources resources = clientResources.getIfUnique();
             // Assume standalone
             if (redisURIs.size() == 1) {
@@ -136,3 +137,4 @@ class RedisConfiguration {
 
     }
 }
+
