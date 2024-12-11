@@ -26,7 +26,7 @@ package io.github.jeeware.cloud.lock4j.jdbc;
  * 		locked_by varchar(255)
  * )
  * </pre>
- * We use <tt>bigint</tt> to store epoch of timestamp for locked_at, unlocked_at
+ * We use <code>bigint</code> to store epoch of timestamp for locked_at, unlocked_at
  * and lock_heartbeat_at columns which is optimal for performance
  *
  * @author hbourada

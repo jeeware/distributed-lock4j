@@ -26,6 +26,7 @@ public interface RedisScript<T> {
 
     /**
      * Set SHA1 returned from <code>SCRIPT LOAD</code> Redis command.
+     * @param  sha1 the SHA1 value
      */
     void setSha1(String sha1);
 
