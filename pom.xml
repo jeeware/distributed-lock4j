@@ -50,6 +50,7 @@
         <embedded-redis.version>1.4.3</embedded-redis.version>
         <guava.version>33.1.0-jre</guava.version>
         <embed.mongo.version>4.18.0</embed.mongo.version>
+        <project.scm.id>git</project.scm.id>
     </properties>
 
     <dependencies>
