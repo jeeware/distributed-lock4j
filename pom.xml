@@ -20,8 +20,8 @@
     </parent>
 
     <scm>
-        <connection>scm:git:git://github.com/jeeware/distributed-lock4j.git</connection>
-        <developerConnection>scm:git:git@github.com:jeeware/distributed-lock4j.git</developerConnection>
+        <connection>scm:git:https://github.com/jeeware/distributed-lock4j.git</connection>
+        <developerConnection>scm:git:https://hbourada@github.com/jeeware/distributed-lock4j.git</developerConnection>
         <url>https://github.com/jeeware/distributed-lock4j</url>
     </scm>
 
