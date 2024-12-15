@@ -14,6 +14,7 @@
 package io.github.jeeware.cloud.lock4j.support;
 
 import io.github.jeeware.cloud.lock4j.Watchable;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author hbourada
  */
+@Slf4j
 public abstract class AbstractWatchable implements Watchable {
 
     private final Map<String, Semaphore> locks = new ConcurrentHashMap<>();
@@ -33,17 +35,25 @@ public abstract class AbstractWatchable implements Watchable {
 
     @Override
     public void await(String lockId) throws InterruptedException {
-        getSemaphore(lockId).acquire();
+        Semaphore semaphore = getSemaphore(lockId);
+        semaphore.acquire();
+        log.trace("Semaphore [lockId={}, {}] acquired", lockId, semaphore);
     }
 
     @Override
     public void await(String lockId, long timeoutMillis) throws InterruptedException {
-        getSemaphore(lockId).tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
+        Semaphore semaphore = getSemaphore(lockId);
+        boolean acquired = semaphore.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
+        log.trace("Try acquire semaphore [lockId={}, {}] with timeout {}ms => {} ", lockId, semaphore, timeoutMillis, acquired);
     }
 
     @Override
     public void signal(String lockId) {
-        getSemaphore(lockId).release();
+        Semaphore semaphore = getSemaphore(lockId);
+        if (semaphore.availablePermits() == 0) {
+            semaphore.release();
+            log.trace("Semaphore [lockId={}, {}] released", lockId, semaphore);
+        }
     }
 
     private Semaphore getSemaphore(String lock) {

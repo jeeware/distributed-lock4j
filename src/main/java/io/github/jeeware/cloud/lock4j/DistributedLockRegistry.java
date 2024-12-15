@@ -13,7 +13,10 @@
 
 package io.github.jeeware.cloud.lock4j;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.Validate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
@@ -27,15 +30,11 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
-import org.apache.commons.lang3.Validate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import lombok.RequiredArgsConstructor;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Registry for {@link DistributedLock}
- * 
+ *
  * @author hbourada
  * @version 1.0
  */
@@ -47,7 +46,7 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private static final int DEFAULT_DEADLOCK_TIMEOUT = 30000;
 
-    private final Map<String, DistributedLock> locks;
+    private final Map<String, DistributedLockImpl> locks;
 
     private final LockRepository repository;
 
@@ -97,6 +96,11 @@ public class DistributedLockRegistry implements AutoCloseable {
             boolean unlockCanceled = unlockDeadLocksFuture.cancel(true);
             LOGGER.info("Closing registry instanceId: {}. Cancel scheduled refresh lock: {}, " +
                     "cancel scheduled unlock deadlocks: {}", instanceId, refreshCanceled, unlockCanceled);
+            locks.forEach((id, lock) -> {
+                if (lock.tryUnlock()) {
+                    LOGGER.info("Successfully unlocked lock id={} when closing registry", id);
+                }
+            });
         }
     }
 
@@ -260,14 +264,24 @@ public class DistributedLockRegistry implements AutoCloseable {
             }
 
             try {
-                if (jvmLock.getHoldCount() == 1) {
-                    repository.releaseLock(id, instanceId);
-                    heldByCurrentProcess = false;
-                    locks.remove(id); // lock is no more used => remove it
-                }
+                repository.releaseLock(id, instanceId);
+                heldByCurrentProcess = false;
+                locks.remove(id); // lock is no more used => remove it
             } finally {
                 jvmLock.unlock();
             }
+        }
+
+        boolean tryUnlock() {
+            if (jvmLock.isHeldByCurrentThread()) {
+                try {
+                    repository.releaseLock(id, instanceId);
+                } finally {
+                    jvmLock.unlock();
+                }
+                return true;
+            }
+            return false;
         }
 
         @Override
@@ -288,7 +302,7 @@ public class DistributedLockRegistry implements AutoCloseable {
         @Override
         public String toString() {
             return "DistributedLockImpl[id=" + id + "][instanceId=" + instanceId
-                    + "], " + jvmLock.toString();
+                    + "], " + jvmLock;
         }
     }
 }

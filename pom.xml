@@ -137,11 +137,13 @@
             <groupId>de.flapdoodle.embed</groupId>
             <artifactId>de.flapdoodle.embed.mongo.spring25x</artifactId>
             <version>${embed.mongo.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>de.flapdoodle.embed</groupId>
             <artifactId>de.flapdoodle.embed.mongo</artifactId>
             <version>${embed.mongo.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.github.codemonstur</groupId>
@@ -165,6 +167,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
+                            <Implementation-Vendor>Jeeware Software SAS</Implementation-Vendor>
                             <Implementation-Title>${project.name}</Implementation-Title>
                             <Implementation-Version>${project.version}</Implementation-Version>
                             <Automatic-Module-Name>jeeware.cloud.lock4j</Automatic-Module-Name>
