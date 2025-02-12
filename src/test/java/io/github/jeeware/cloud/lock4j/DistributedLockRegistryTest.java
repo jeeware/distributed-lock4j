@@ -274,7 +274,7 @@ abstract class DistributedLockRegistryTest {
         try {
             log.info("Start execute task {}", value);
             singletonQueue.add(value);
-            assertThat(lock.isHeldByCurrentProcess()).isTrue();
+            assertThat(lock.isHeldByCurrentProcess()).as("lock %s", lock).isTrue();
             MILLISECONDS.sleep(RandomUtils.nextInt(MIN_TIME, MAX_TIME));
             log.info("End execute task {}", singletonQueue.element());
             return singletonQueue.remove();

@@ -142,7 +142,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         RedisConnection connection;
 
         RedisWatchable() {
-            RedisLockKey lockKey = new RedisLockKey(lockPrefix, "", "");
+            RedisLockKey lockKey = newRedisLockKey(lockPrefix, "", "");
             this.idPrefix = lockKey.getId();
             this.lockedByPrefix = lockKey.getLockedBy();
         }

@@ -94,7 +94,8 @@ public class LettuceConnectionFactory implements RedisConnectionFactory, AutoClo
         return ((RedisClusterClient) redisClient).connectPubSub();
     }
 
-    protected SharedConnection<?> getSharedConnection() {
+    @SuppressWarnings("java:S1452")
+    SharedConnection<?> getSharedConnection() {
         if (sharedConnection == null) {
             synchronized (this) {
                 if (sharedConnection == null) {

@@ -52,7 +52,7 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private final Map<String, DistributedLockImpl> locks;
 
-    private final List<DistributedLockListener> listeners;
+    private final CopyOnWriteArrayList<DistributedLockListener> listeners;
 
     private final LockRepository repository;
 
@@ -138,8 +138,8 @@ public class DistributedLockRegistry implements AutoCloseable {
         this.deadLockTimeout = deadLockTimeoutMillis;
     }
 
-    public void registerListener(@NonNull DistributedLockListener listener) {
-        listeners.add(listener);
+    public void addListener(@NonNull DistributedLockListener listener) {
+        listeners.addIfAbsent(listener);
     }
 
     @Override
@@ -191,10 +191,16 @@ public class DistributedLockRegistry implements AutoCloseable {
                 jvmLock.unlock();
             }
             DistributedLockException lockException = DistributedLockException.create(acquire, id, cause);
-            for (DistributedLockListener listener : listeners) {
+            for (DistributedLockListener listener : getListeners()) {
                 listener.onError(lockException);
             }
-            throw lockException;
+        }
+
+        private List<DistributedLockListener> getListeners() {
+            if (listeners.isEmpty()) {
+                addListener(DistributedLockListener.RETHROW);
+            }
+            return listeners;
         }
 
         @Override
@@ -332,8 +338,8 @@ public class DistributedLockRegistry implements AutoCloseable {
 
         @Override
         public String toString() {
-            return "DistributedLockImpl[id=" + id + "][instanceId=" + instanceId
-                    + "], " + jvmLock;
+            return "DistributedLockImpl[id=" + id + ", instanceId=" + instanceId + ", jvmLock=" + jvmLock
+                    + ", heldByCurrentProcess=" + heldByCurrentProcess + "]";
         }
     }
 }

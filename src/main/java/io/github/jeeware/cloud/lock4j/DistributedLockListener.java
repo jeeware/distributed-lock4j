@@ -16,5 +16,9 @@ package io.github.jeeware.cloud.lock4j;
 @FunctionalInterface
 public interface DistributedLockListener {
 
+    DistributedLockListener RETHROW = exception -> {
+        throw exception;
+    };
+
     void onError(DistributedLockException exception);
 }
