@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.springframework.core.io.ResourceLoader.CLASSPATH_URL_PREFIX;
 
 /**
  * {@link ConfigurationProperties} for distributed lock settings.
@@ -91,7 +92,7 @@ public class DistributedLockProperties {
         private String functionName;
 
         @NonNull
-        private String schemaLocation = DEFAULT_SCHEMA_PATH;
+        private String schemaLocation = CLASSPATH_URL_PREFIX + DEFAULT_SCHEMA_PATH;
 
         private boolean createSchema = true;
 

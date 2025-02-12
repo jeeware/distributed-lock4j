@@ -13,15 +13,19 @@
 
 package io.github.jeeware.cloud.lock4j;
 
+import io.github.jeeware.cloud.lock4j.support.LoggingErrorTask;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +52,8 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private final Map<String, DistributedLockImpl> locks;
 
+    private final List<DistributedLockListener> listeners;
+
     private final LockRepository repository;
 
     private final ScheduledExecutorService scheduler;
@@ -72,6 +78,7 @@ public class DistributedLockRegistry implements AutoCloseable {
         this.retryerSupplier = Objects.requireNonNull(retryerSupplier, "retryerSupplier is null");
         this.instanceId = UUID.randomUUID().toString();
         this.locks = new ConcurrentHashMap<>();
+        this.listeners = new CopyOnWriteArrayList<>();
         this.scheduledTasksStarted = new AtomicBoolean();
         this.refreshLockInterval = DEFAULT_REFRESH_INTERVAL;
         this.deadLockTimeout = DEFAULT_DEADLOCK_TIMEOUT;
@@ -79,14 +86,26 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     public DistributedLock getLock(String id) {
         if (scheduledTasksStarted.compareAndSet(false, true)) {
-            refreshLockFuture = scheduler.scheduleWithFixedDelay(() -> repository.refreshActiveLocks(instanceId),
-                    refreshLockInterval, refreshLockInterval, MILLISECONDS);
-            unlockDeadLocksFuture = scheduler.scheduleWithFixedDelay(() -> repository.releaseDeadLocks(deadLockTimeout),
-                    0, deadLockTimeout, MILLISECONDS);
+            refreshLockFuture = schedulePeriodically(this::refreshActiveLocks, refreshLockInterval, refreshLockInterval);
+            unlockDeadLocksFuture = schedulePeriodically(this::releaseDeadLocks, 0, deadLockTimeout);
             LOGGER.info("Scheduled tasks for registry {} created.", this);
         }
 
         return locks.computeIfAbsent(id, k -> new DistributedLockImpl(id));
+    }
+
+    private ScheduledFuture<?> schedulePeriodically(Runnable task, long initialDelayMillis, long delayMillis) {
+        return scheduler.scheduleWithFixedDelay(new LoggingErrorTask(task), initialDelayMillis, delayMillis, MILLISECONDS);
+    }
+
+    private void refreshActiveLocks() {
+        if (!locks.isEmpty()) {
+            repository.refreshActiveLocks(instanceId);
+        }
+    }
+
+    private void releaseDeadLocks() {
+        repository.releaseDeadLocks(deadLockTimeout);
     }
 
     @Override
@@ -119,6 +138,10 @@ public class DistributedLockRegistry implements AutoCloseable {
         this.deadLockTimeout = deadLockTimeoutMillis;
     }
 
+    public void registerListener(@NonNull DistributedLockListener listener) {
+        listeners.add(listener);
+    }
+
     @Override
     public String toString() {
         return "(instanceId='" + instanceId + '\'' +
@@ -142,7 +165,7 @@ public class DistributedLockRegistry implements AutoCloseable {
             jvmLock.lock();
             Retryer retryer = null;
 
-            while (true) {
+            do {
                 try {
                     if (repository.acquireLock(id, instanceId)) {
                         heldByCurrentProcess = true;
@@ -151,18 +174,27 @@ public class DistributedLockRegistry implements AutoCloseable {
                     repository.awaitReleaseLock(id);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    jvmLock.unlock();
-                    throw cannotAcquireLock(e);
+                    handleException(true, e);
                 } catch (Exception e) {
                     if (retryer == null) {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        jvmLock.unlock();
-                        throw cannotAcquireLock(e);
+                        handleException(true, e);
                     }
                 }
+            } while (true);
+        }
+
+        private void handleException(boolean acquire, Exception cause) {
+            if (acquire) {
+                jvmLock.unlock();
             }
+            DistributedLockException lockException = DistributedLockException.create(acquire, id, cause);
+            for (DistributedLockListener listener : listeners) {
+                listener.onError(lockException);
+            }
+            throw lockException;
         }
 
         @Override
@@ -170,13 +202,16 @@ public class DistributedLockRegistry implements AutoCloseable {
             jvmLock.lockInterruptibly();
             Retryer retryer = null;
 
-            while (true) {
+            do {
                 try {
-                    if (repository.acquireLock(id, instanceId)) {
+                    if (!repository.acquireLock(id, instanceId)) {
+                        repository.awaitReleaseLock(id);
+                    } else if (Thread.interrupted()) {
+                        throw new InterruptedException();
+                    } else {
                         heldByCurrentProcess = true;
                         break;
                     }
-                    repository.awaitReleaseLock(id);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     jvmLock.unlock();
@@ -186,15 +221,10 @@ public class DistributedLockRegistry implements AutoCloseable {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        jvmLock.unlock();
-                        throw cannotAcquireLock(e);
+                        handleException(true, e);
                     }
                 }
-            }
-        }
-
-        private CannotAcquireLockException cannotAcquireLock(Exception ex) {
-            return new CannotAcquireLockException("Can not acquire lock id: " + id, ex);
+            } while (true);
         }
 
         @Override
@@ -209,8 +239,7 @@ public class DistributedLockRegistry implements AutoCloseable {
                     return true;
                 }
             } catch (Exception e) {
-                jvmLock.unlock();
-                throw cannotAcquireLock(e);
+                handleException(true, e);
             }
 
             jvmLock.unlock();
@@ -244,8 +273,7 @@ public class DistributedLockRegistry implements AutoCloseable {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        jvmLock.unlock();
-                        throw cannotAcquireLock(e);
+                        handleException(true, e);
                     }
                 }
             } while (System.currentTimeMillis() <= until);
@@ -258,27 +286,30 @@ public class DistributedLockRegistry implements AutoCloseable {
 
         @Override
         public void unlock() {
-            if (!jvmLock.isHeldByCurrentThread()) {
-                throw new IllegalMonitorStateException("attempt to unlock lock id: " + id +
-                        ", not locked by current thread");
-            }
+            jvmLock.unlock();
+            locks.remove(id); // lock is no more used => remove it
 
-            try {
-                repository.releaseLock(id, instanceId);
-                heldByCurrentProcess = false;
-                locks.remove(id); // lock is no more used => remove it
-            } finally {
-                jvmLock.unlock();
-            }
+            Retryer retryer = null;
+            do {
+                try {
+                    repository.releaseLock(id, instanceId);
+                    heldByCurrentProcess = false;
+                    break;
+                } catch (Exception e) {
+                    if (retryer == null) {
+                        retryer = retryerSupplier.get();
+                    }
+                    if (!retryer.retryFor(e)) {
+                        handleException(false, e);
+                    }
+                }
+            } while (true);
+
         }
 
         boolean tryUnlock() {
-            if (jvmLock.isHeldByCurrentThread()) {
-                try {
-                    repository.releaseLock(id, instanceId);
-                } finally {
-                    jvmLock.unlock();
-                }
+            if (isHeldByCurrentProcess()) {
+                repository.releaseLock(id, instanceId);
                 return true;
             }
             return false;

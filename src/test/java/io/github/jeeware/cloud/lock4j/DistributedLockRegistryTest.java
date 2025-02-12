@@ -179,7 +179,7 @@ abstract class DistributedLockRegistryTest {
         }
 
         final Thread awaitingThread = interruptibleRepository.interruptAnyAwaitingThread();
-        log.info("Interrupting thread: {}", awaitingThread.getName());
+        log.info("Thread: {} was interrupted", awaitingThread.getName());
 
         latch.await();
 
@@ -251,9 +251,11 @@ abstract class DistributedLockRegistryTest {
                 results.add(r);
             }
             latch.countDown();
+            log.debug("on success with r={}, latch={}", r, latch);
         }, e -> {
             exceptionRef.compareAndSet(null, e);
             latch.countDown();
+            log.debug("on failure with exception={}, latch={}", e, latch);
         });
     }
 
