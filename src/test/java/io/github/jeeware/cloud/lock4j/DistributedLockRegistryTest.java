@@ -36,6 +36,7 @@ import io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockAutoCo
 import io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockProperties;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -86,9 +87,9 @@ abstract class DistributedLockRegistryTest {
     @Autowired
     Supplier<Retryer> retryerSupplier;
 
-    private final String lockName = randomAlphanumeric(20);
+    private final String lockName = "lock-" + randomAlphanumeric(10);
 
-    private final int nTasks = RandomUtils.nextInt(2, 5);
+    private final int nTasks = RandomUtils.nextInt(2, 10);
 
     private final List<String> inputs = new ArrayList<>(nTasks);
 
@@ -108,7 +109,7 @@ abstract class DistributedLockRegistryTest {
         log.info("Creating {} inputs data to be processed by concurrent tasks", nTasks);
     }
 
-    @Test
+    @RepeatedTest(50)
     void lockByConcurrentThreadsShouldAcquireSequentially() throws InterruptedException {
         final DistributedLock lock = lockRegistry.getLock(lockName);
 
@@ -250,12 +251,12 @@ abstract class DistributedLockRegistryTest {
             if (r != null) {
                 results.add(r);
             }
+//            log.debug("on success with r={}, latch={}", r, latch);
             latch.countDown();
-            log.debug("on success with r={}, latch={}", r, latch);
         }, e -> {
             exceptionRef.compareAndSet(null, e);
+//            log.debug("on failure with exception={}, latch={}", e, latch);
             latch.countDown();
-            log.debug("on failure with exception={}, latch={}", e, latch);
         });
     }
 
@@ -274,7 +275,7 @@ abstract class DistributedLockRegistryTest {
         try {
             log.info("Start execute task {}", value);
             singletonQueue.add(value);
-            assertThat(lock.isHeldByCurrentProcess()).as("lock %s", lock).isTrue();
+            assertThat(lock.isHeldByCurrentProcess()).as("lock %s, value=%s", lock, value).isTrue();
             MILLISECONDS.sleep(RandomUtils.nextInt(MIN_TIME, MAX_TIME));
             log.info("End execute task {}", singletonQueue.element());
             return singletonQueue.remove();

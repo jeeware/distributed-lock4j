@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
  * Wrap a runnable to catch any potential exception permitting to
  * {@link java.util.concurrent.ScheduledExecutorService#scheduleWithFixedDelay(Runnable, long, long, TimeUnit)} to
  * reschedule subsequent executions of the task even if an error occurs.
+ *
+ * @author hbourada
  */
 @Slf4j
 @RequiredArgsConstructor

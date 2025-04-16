@@ -13,7 +13,10 @@
 
 package io.github.jeeware.cloud.lock4j.support;
 
+import io.github.jeeware.cloud.lock4j.BackoffStrategy;
 import io.github.jeeware.cloud.lock4j.Retryer;
+import lombok.Builder;
+import org.apache.commons.lang3.Validate;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -23,21 +26,28 @@ import java.util.Map;
 /**
  * Simple {@link Retryer} with a max retry count and a set of retryable
  * exception types base.
- * 
+ *
  * @author hbourada
  */
 public class SimpleRetryer implements Retryer {
 
-    private final Map<Class<?>, Boolean> exceptionTypes;
-
     private final int maxRetry;
+
+    private final BackoffStrategy backoffStrategy;
+
+    private final Map<Class<?>, Boolean> exceptionTypes;
 
     private int retryCount;
 
     @SafeVarargs
-    public SimpleRetryer(int maxRetry, Class<? extends Exception>... exceptionTypes) {
+    @Builder
+    private SimpleRetryer(int maxRetry,
+                          BackoffStrategy backoffStrategy,
+                          Class<? extends Exception>... exceptionTypes) {
+        Validate.isTrue(maxRetry > 0, "maxRetry must be greater than 0");
+        Validate.noNullElements(exceptionTypes, "exceptionTypes has a null element at index=%d");
         this.maxRetry = maxRetry;
-        this.retryCount = 0;
+        this.backoffStrategy = Validate.notNull(backoffStrategy, "backoffStrategy must not be null");
         this.exceptionTypes = new IdentityHashMap<>(exceptionTypes.length);
 
         for (Class<?> exceptionType : exceptionTypes) {
@@ -46,31 +56,36 @@ public class SimpleRetryer implements Retryer {
     }
 
     @Override
-    public boolean retryFor(Exception e) {
-        if (retryCount++ < maxRetry) {
-            final List<Class<?>> childTypes = new ArrayList<>();
-            Class<?> currentType = e.getClass();
-            boolean retry = false;
-
-            do {
-                final Boolean currentRetry = exceptionTypes.get(currentType);
-                if (currentRetry != null) {
-                    retry = currentRetry;
-                    break;
-                }
-                childTypes.add(currentType);
-                currentType = currentType.getSuperclass();
-            } while (currentType != Exception.class);
-
-            if (!childTypes.isEmpty()) {
-                final boolean r = retry;
-                childTypes.forEach(type -> exceptionTypes.put(type, r));
-            }
-
-            return retry;
+    public boolean shouldRetryFor(Exception e) {
+        if (retryCount++ >= maxRetry) {
+            return false;
         }
 
-        return false;
+        final List<Class<?>> childTypes = new ArrayList<>();
+        Class<?> currentType = e.getClass();
+        boolean retry = false;
+
+        do {
+            final Boolean currentRetry = exceptionTypes.get(currentType);
+            if (currentRetry != null) {
+                retry = currentRetry;
+                break;
+            }
+            childTypes.add(currentType);
+            currentType = currentType.getSuperclass();
+        } while (currentType != Exception.class);
+
+        if (!childTypes.isEmpty()) {
+            final boolean r = retry;
+            childTypes.forEach(type -> exceptionTypes.put(type, r));
+        }
+
+        return retry;
+
     }
 
+    @Override
+    public void sleep() throws InterruptedException {
+        backoffStrategy.sleep();
+    }
 }

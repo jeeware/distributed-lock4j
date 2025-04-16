@@ -22,6 +22,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.dao.TransientDataAccessException;
 
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -54,6 +55,10 @@ public class DistributedLockProperties {
     private long deadLockTimeout = 30000;
 
     private int maxRetry = 3;
+
+    private Duration minSleepDuration = Duration.ofMillis(100);
+
+    private Duration maxSleepDuration = Duration.ofMillis(5000);
 
     @Setter(AccessLevel.NONE)
     private String instanceId = UUID.randomUUID().toString();

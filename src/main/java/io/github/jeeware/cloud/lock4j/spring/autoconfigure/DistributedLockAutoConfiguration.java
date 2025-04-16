@@ -13,13 +13,11 @@
 
 package io.github.jeeware.cloud.lock4j.spring.autoconfigure;
 
-import java.lang.reflect.Method;
-import java.util.Objects;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Supplier;
-
-import javax.sql.DataSource;
-
+import com.mongodb.DB;
+import com.mongodb.MongoException;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoDatabase;
+import io.github.jeeware.cloud.lock4j.BackoffStrategy;
 import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.LockRepository;
@@ -29,9 +27,11 @@ import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.jdbc.SQLDialects;
 import io.github.jeeware.cloud.lock4j.mongo.IdentityExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.mongo.MongoLockRepository;
-import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
 import io.github.jeeware.cloud.lock4j.spring.MongoExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.spring.SQLExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.support.RandomBackoffStrategy;
+import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -58,12 +58,12 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
-import com.mongodb.DB;
-import com.mongodb.MongoException;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoDatabase;
-
-import lombok.RequiredArgsConstructor;
+import javax.sql.DataSource;
+import java.lang.reflect.Method;
+import java.util.Objects;
+import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Supplier;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for distributed locks.
@@ -106,8 +106,22 @@ public class DistributedLockAutoConfiguration {
 
     @ConditionalOnMissingBean
     @Bean
-    public Supplier<Retryer> retryerSupplier() {
-        return () -> new SimpleRetryer(properties.getMaxRetry(), properties.getRetryableExceptions());
+    public Supplier<Retryer> retryerSupplier(BackoffStrategy backoffStrategy) {
+        return () -> SimpleRetryer.builder()
+                .maxRetry(properties.getMaxRetry())
+                .backoffStrategy(backoffStrategy)
+                .exceptionTypes(properties.getRetryableExceptions())
+                .build();
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public BackoffStrategy backoffStrategy() {
+        return RandomBackoffStrategy.builder()
+                .random(new Random())
+                .minSleepDuration(properties.getMinSleepDuration())
+                .maxSleepDuration(properties.getMaxSleepDuration())
+                .build();
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -121,8 +135,8 @@ public class DistributedLockAutoConfiguration {
         @ConditionalOnMissingBean
         @Bean
         public LockRepository lockRepository(DataSourceProperties dataSourceProperties,
-                SQLExceptionTranslator translator,
-                DistributedLockProperties properties) {
+                                             SQLExceptionTranslator translator,
+                                             DistributedLockProperties properties) {
             final DatabaseDriver driver = DatabaseDriver.fromJdbcUrl(dataSourceProperties.determineUrl());
             final SQLDialects dialect = SQLDialects.valueOf(driver.name());
             final DistributedLockProperties.Jdbc jdbc = properties.getJdbc();
@@ -139,7 +153,7 @@ public class DistributedLockAutoConfiguration {
         @ConditionalOnProperty(value = "cloud.lock4j.jdbc.create-schema", matchIfMissing = true)
         @Bean
         public JdbcLockRepositoryInitializer jdbcLockRepositoryInitializer(ApplicationContext context,
-                DistributedLockProperties properties) {
+                                                                           DistributedLockProperties properties) {
             return new JdbcLockRepositoryInitializer(dataSource, context, properties);
         }
     }
@@ -152,9 +166,9 @@ public class DistributedLockAutoConfiguration {
         @ConditionalOnMissingBean
         @Bean(initMethod = "start")
         public LockRepository lockRepository(MongoDatabase database,
-                ExceptionTranslator<MongoException, ? extends RuntimeException> translator,
-                DistributedLockProperties properties,
-                ObjectProvider<WatchableThreadFactory> threadFactories) {
+                                             ExceptionTranslator<MongoException, ? extends RuntimeException> translator,
+                                             DistributedLockProperties properties,
+                                             ObjectProvider<WatchableThreadFactory> threadFactories) {
             MongoLockRepository repository = new MongoLockRepository(database, properties.getMongo().getCollectionName(), translator);
             WatchableThreadFactory threadFactory = threadFactories.getIfUnique();
             if (threadFactory != null) {

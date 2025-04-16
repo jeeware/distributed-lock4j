@@ -13,51 +13,59 @@
 
 package io.github.jeeware.cloud.lock4j.support;
 
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class SimpleRetryerTest {
 
     @Test
     void retryForExactDeclaredException() {
-        final int maxRetry = 3;
-        final SimpleRetryer retryer = new SimpleRetryer(maxRetry, IOException.class);
+        final SimpleRetryer retryer = retryer(3, IOException.class);
 
-        boolean allRetry = IntStream.range(0, maxRetry)
+        boolean allRetry = IntStream.range(0, 3)
                 .mapToObj(i -> new IOException(String.valueOf(i)))
-                .allMatch(retryer::retryFor);
+                .allMatch(retryer::shouldRetryFor);
 
-        Assertions.assertThat(allRetry).isTrue();
+        assertThat(allRetry).isTrue();
     }
 
     @Test
     void retryForDescendentException() {
-        final int maxRetry = 4;
-        final SimpleRetryer retryer = new SimpleRetryer(maxRetry, IOException.class);
+        final SimpleRetryer retryer = retryer(4, IOException.class);
 
         boolean allRetry = Stream.of(new SocketTimeoutException(), new ConnectException(), new SocketException(),
-                new ConnectException())
-                .allMatch(retryer::retryFor);
+                        new ConnectException())
+                .allMatch(retryer::shouldRetryFor);
 
-        Assertions.assertThat(allRetry).isTrue();
+        assertThat(allRetry).isTrue();
     }
 
     @Test
     void retryForNonRetryableException() {
-        final int maxRetry = 2;
-        final SimpleRetryer retryer = new SimpleRetryer(maxRetry, IOException.class);
+        final SimpleRetryer retryer = retryer(2, IOException.class);
 
         boolean allRetry = Stream.of(new IllegalStateException(), new IOException())
-                .allMatch(retryer::retryFor);
+                .allMatch(retryer::shouldRetryFor);
 
-        Assertions.assertThat(allRetry).isFalse();
+        assertThat(allRetry).isFalse();
+    }
+
+    @SafeVarargs
+    private static SimpleRetryer retryer(int maxRetry, Class<? extends Exception>... exceptionTypes) {
+        return SimpleRetryer.builder()
+                .maxRetry(maxRetry)
+                .backoffStrategy(RandomBackoffStrategy.builder().maxSleepDuration(Duration.ofSeconds(1)).build())
+                .exceptionTypes(exceptionTypes)
+                .build();
     }
 
 }

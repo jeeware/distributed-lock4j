@@ -16,11 +16,11 @@ package io.github.jeeware.cloud.lock4j;
 import io.github.jeeware.cloud.lock4j.support.LoggingErrorTask;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -52,8 +52,6 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private final Map<String, DistributedLockImpl> locks;
 
-    private final CopyOnWriteArrayList<DistributedLockListener> listeners;
-
     private final LockRepository repository;
 
     private final ScheduledExecutorService scheduler;
@@ -78,7 +76,6 @@ public class DistributedLockRegistry implements AutoCloseable {
         this.retryerSupplier = Objects.requireNonNull(retryerSupplier, "retryerSupplier is null");
         this.instanceId = UUID.randomUUID().toString();
         this.locks = new ConcurrentHashMap<>();
-        this.listeners = new CopyOnWriteArrayList<>();
         this.scheduledTasksStarted = new AtomicBoolean();
         this.refreshLockInterval = DEFAULT_REFRESH_INTERVAL;
         this.deadLockTimeout = DEFAULT_DEADLOCK_TIMEOUT;
@@ -138,10 +135,6 @@ public class DistributedLockRegistry implements AutoCloseable {
         this.deadLockTimeout = deadLockTimeoutMillis;
     }
 
-    public void addListener(@NonNull DistributedLockListener listener) {
-        listeners.addIfAbsent(listener);
-    }
-
     @Override
     public String toString() {
         return "(instanceId='" + instanceId + '\'' +
@@ -172,35 +165,33 @@ public class DistributedLockRegistry implements AutoCloseable {
                         break;
                     }
                     repository.awaitReleaseLock(id);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    handleException(true, e);
+                } catch (InterruptedException ie) {
+                    jvmLock.unlock();
+                    handleInterruptedException(ie, false);
                 } catch (Exception e) {
                     if (retryer == null) {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        handleException(true, e);
+                        handleException(e, true);
                     }
                 }
             } while (true);
         }
 
-        private void handleException(boolean acquire, Exception cause) {
+        private void handleException(Exception cause, boolean acquire) {
             if (acquire) {
                 jvmLock.unlock();
             }
-            DistributedLockException lockException = DistributedLockException.create(acquire, id, cause);
-            for (DistributedLockListener listener : getListeners()) {
-                listener.onError(lockException);
-            }
+            throw DistributedLockException.create(acquire, id, instanceId, cause);
         }
 
-        private List<DistributedLockListener> getListeners() {
-            if (listeners.isEmpty()) {
-                addListener(DistributedLockListener.RETHROW);
+        @SneakyThrows
+        private void handleInterruptedException(InterruptedException ie, boolean rethrow) {
+            Thread.currentThread().interrupt();
+            if (rethrow) {
+                throw ie;
             }
-            return listeners;
         }
 
         @Override
@@ -219,15 +210,14 @@ public class DistributedLockRegistry implements AutoCloseable {
                         break;
                     }
                 } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
                     jvmLock.unlock();
-                    throw ie;
+                    handleInterruptedException(ie, true);
                 } catch (Exception e) {
                     if (retryer == null) {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        handleException(true, e);
+                        handleException(e, true);
                     }
                 }
             } while (true);
@@ -245,7 +235,7 @@ public class DistributedLockRegistry implements AutoCloseable {
                     return true;
                 }
             } catch (Exception e) {
-                handleException(true, e);
+                handleException(e, true);
             }
 
             jvmLock.unlock();
@@ -279,7 +269,7 @@ public class DistributedLockRegistry implements AutoCloseable {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        handleException(true, e);
+                        handleException(e, true);
                     }
                 }
             } while (System.currentTimeMillis() <= until);
@@ -292,9 +282,6 @@ public class DistributedLockRegistry implements AutoCloseable {
 
         @Override
         public void unlock() {
-            jvmLock.unlock();
-            locks.remove(id); // lock is no more used => remove it
-
             Retryer retryer = null;
             do {
                 try {
@@ -306,11 +293,12 @@ public class DistributedLockRegistry implements AutoCloseable {
                         retryer = retryerSupplier.get();
                     }
                     if (!retryer.retryFor(e)) {
-                        handleException(false, e);
+                        handleException(e, false);
                     }
                 }
             } while (true);
-
+            locks.remove(id); // lock is no more used => remove it
+            jvmLock.unlock();
         }
 
         boolean tryUnlock() {

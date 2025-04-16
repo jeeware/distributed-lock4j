@@ -24,33 +24,41 @@ import lombok.Getter;
 public abstract class DistributedLockException extends RuntimeException {
 
     private final String lockId;
+    private final String instanceId;
 
-    protected DistributedLockException(String message, Throwable cause, String lockId) {
-        super(message, cause);
+    DistributedLockException(Throwable cause, String lockId, String instanceId) {
+        super(cause);
         this.lockId = lockId;
+        this.instanceId = instanceId;
     }
 
-    public static DistributedLockException create(boolean acquire, String lockId, Throwable cause) {
-        return acquire ? new CannotAcquire(lockId, cause) : new CannotRelease(lockId, cause);
+    @Override
+    public final String getMessage() {
+        return String.format("Can not %s lock id: %s for instance id: %s", this.getClass() == CannotAcquire.class ?
+                "acquire" : "release", lockId, instanceId);
+    }
+
+    public static DistributedLockException create(boolean acquire, String lockId, String instanceId, Throwable cause) {
+        return acquire ? new CannotAcquire(lockId, instanceId, cause) : new CannotRelease(lockId, instanceId, cause);
     }
 
     /**
      * {@link DistributedLockException} raised when a distributed lock can not be acquired for some reason.
      */
-    public static final class CannotAcquire extends DistributedLockException {
+    private static final class CannotAcquire extends DistributedLockException {
 
-        public CannotAcquire(String lockId, Throwable cause) {
-            super("Can not acquire lock id: " + lockId, cause, lockId);
+        public CannotAcquire(String lockId, String instanceId, Throwable cause) {
+            super(cause, lockId, instanceId);
         }
     }
 
     /**
      * {@link DistributedLockException} raised when a distributed lock can not be released for some reason
      */
-    public static final class CannotRelease extends DistributedLockException {
+    private static final class CannotRelease extends DistributedLockException {
 
-        public CannotRelease(String lockId, Throwable cause) {
-            super("Can not release lock id: " + lockId, cause, lockId);
+        public CannotRelease(String lockId, String instanceId, Throwable cause) {
+            super(cause, lockId, instanceId);
         }
     }
 }
