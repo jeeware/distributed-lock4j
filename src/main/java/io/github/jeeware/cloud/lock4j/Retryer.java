@@ -15,6 +15,8 @@ package io.github.jeeware.cloud.lock4j;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.concurrent.Callable;
 
@@ -42,12 +44,23 @@ public interface Retryer {
      */
     boolean shouldRetryFor(Exception e);
 
-    default <T> T apply(Callable<T> callable) throws Exception {
+    /**
+     * @param retryTask    task which will be repeated until {@link #shouldRetryFor(Exception)} returns false
+     * @param recoveryTask recovery task executed when retries exhausted
+     * @param <T>          result type
+     * @return result returned by the retryTask or recoverTask call
+     * @throws Exception an exception if retry exhausted and recover is null
+     * @since 1.0.2
+     */
+    default <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws Exception {
         do {
             try {
-                return callable.call();
+                return retryTask.call();
             } catch (Exception e) {
                 if (!shouldRetryFor(e)) {
+                    if (recoveryTask != null) {
+                        return recoveryTask.recover(e);
+                    }
                     throw e;
                 }
                 sleep();
@@ -57,6 +70,17 @@ public interface Retryer {
     }
 
     void sleep() throws InterruptedException;
+
+    /**
+     * Recovery callback executed after exhausting all retries
+     *
+     * @param <T> recover returning type
+     */
+    @FunctionalInterface
+    interface Recovery<T> {
+
+        <E extends Exception> T recover(E exception) throws E;
+    }
 
     @NoArgsConstructor(access = AccessLevel.PRIVATE)
     final class NeverRetryer implements Retryer {
@@ -72,8 +96,30 @@ public interface Retryer {
         }
 
         @Override
-        public <T> T apply(Callable<T> callable) throws Exception {
-            return callable.call();
+        public <T> T apply(Callable<T> callable, Recovery<T> recoveryTask) throws Exception {
+            if (recoveryTask == null) {
+                return callable.call();
+            }
+            try {
+                return callable.call();
+            } catch (Exception e) {
+                return recoveryTask.recover(e);
+            }
+        }
+    }
+
+    @RequiredArgsConstructor
+    class Delegate implements Retryer {
+
+        @NonNull
+        private final Retryer wrapped;
+
+        public boolean shouldRetryFor(Exception e) {
+            return this.wrapped.shouldRetryFor(e);
+        }
+
+        public void sleep() throws InterruptedException {
+            this.wrapped.sleep();
         }
     }
 }

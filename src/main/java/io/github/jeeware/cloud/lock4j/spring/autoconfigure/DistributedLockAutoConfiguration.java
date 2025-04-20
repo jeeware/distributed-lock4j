@@ -108,19 +108,23 @@ public class DistributedLockAutoConfiguration {
     @Bean
     public Supplier<Retryer> retryerSupplier(BackoffStrategy backoffStrategy) {
         return () -> SimpleRetryer.builder()
-                .maxRetry(properties.getMaxRetry())
+                .maxRetry(properties.getRetry().getMaxRetry())
                 .backoffStrategy(backoffStrategy)
-                .exceptionTypes(properties.getRetryableExceptions())
+                .retryableExceptions(properties.getRetryableExceptions())
+                .nonRetryableExceptions(properties.getNonRetryableExceptions())
                 .build();
     }
 
+    /**
+     * @since 1.0.2
+     */
     @ConditionalOnMissingBean
     @Bean
     public BackoffStrategy backoffStrategy() {
         return RandomBackoffStrategy.builder()
                 .random(new Random())
-                .minSleepDuration(properties.getMinSleepDuration())
-                .maxSleepDuration(properties.getMaxSleepDuration())
+                .minSleepDuration(properties.getRetry().getMinSleepDuration())
+                .maxSleepDuration(properties.getRetry().getMaxSleepDuration())
                 .build();
     }
 

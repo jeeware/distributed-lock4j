@@ -20,6 +20,7 @@ import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -64,7 +65,7 @@ class SimpleRetryerTest {
         return SimpleRetryer.builder()
                 .maxRetry(maxRetry)
                 .backoffStrategy(RandomBackoffStrategy.builder().maxSleepDuration(Duration.ofSeconds(1)).build())
-                .exceptionTypes(exceptionTypes)
+                .retryableExceptions(Arrays.asList(exceptionTypes))
                 .build();
     }
 

@@ -19,15 +19,18 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.apache.commons.lang3.Validate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.dao.TransientDataAccessException;
 
 import java.nio.charset.Charset;
 import java.time.Duration;
-import java.util.Objects;
+import java.util.Collections;
+import java.util.Set;
 import java.util.UUID;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.singleton;
 import static org.springframework.core.io.ResourceLoader.CLASSPATH_URL_PREFIX;
 
 /**
@@ -54,32 +57,37 @@ public class DistributedLockProperties {
 
     private long deadLockTimeout = 30000;
 
-    private int maxRetry = 3;
-
-    private Duration minSleepDuration = Duration.ofMillis(100);
-
-    private Duration maxSleepDuration = Duration.ofMillis(5000);
+    private final Retry retry = new Retry();
 
     @Setter(AccessLevel.NONE)
     private String instanceId = UUID.randomUUID().toString();
 
-    @Getter(AccessLevel.NONE)
-    @Setter(AccessLevel.NONE)
-    private Class<?>[] retryableExceptions = {TransientDataAccessException.class};
+    @NonNull
+    private Set<Class<? extends Exception>> retryableExceptions = singleton(TransientDataAccessException.class);
 
-    @SafeVarargs
-    public final void setRetryableExceptions(Class<? extends Exception>... retryableExceptions) {
-        this.retryableExceptions = Objects.requireNonNull(retryableExceptions, "retryableExceptions is null");
-    }
-
-    @SuppressWarnings("unchecked")
-    public Class<? extends Exception>[] getRetryableExceptions() {
-        return (Class<? extends Exception>[]) retryableExceptions;
-    }
+    @NonNull
+    private Set<Class<? extends Exception>> nonRetryableExceptions = Collections.emptySet();
 
     public void setInstanceId(String instanceId) {
         Validate.notEmpty(instanceId, "instanceId is empty");
         this.instanceId = instanceId;
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    @DeprecatedConfigurationProperty(replacement = "cloud.lock4j.retry.max-retry")
+    public int getMaxRetry() {
+        return retry.getMaxRetry();
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    public void setMaxRetry(int maxRetry) {
+        retry.setMaxRetry(maxRetry);
     }
 
     public enum Type {
@@ -132,6 +140,18 @@ public class DistributedLockProperties {
 
         @NonNull
         private String lockPrefix = "lock";
+
+    }
+
+    @Getter
+    @Setter
+    public static final class Retry {
+
+        private int maxRetry = 3;
+
+        private Duration minSleepDuration = Duration.ofMillis(100);
+
+        private Duration maxSleepDuration = Duration.ofMillis(1000);
 
     }
 }

@@ -14,9 +14,10 @@
 package io.github.jeeware.cloud.lock4j;
 
 /**
- * Back off strategy waiting between 2 retries.
+ * Backoff strategy waiting between 2 retries.
  *
  * @author hbourada
+ * @since 1.0.2
  */
 public interface BackoffStrategy {
 

@@ -16,16 +16,18 @@ package io.github.jeeware.cloud.lock4j.support;
 import io.github.jeeware.cloud.lock4j.BackoffStrategy;
 import io.github.jeeware.cloud.lock4j.Retryer;
 import lombok.Builder;
+import lombok.Singular;
 import org.apache.commons.lang3.Validate;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Simple {@link Retryer} with a max retry count and a set of retryable
- * exception types base.
+ * Simple {@link Retryer} with a max retry count and a set of retryable and non retryable
+ * exception base types.
  *
  * @author hbourada
  */
@@ -39,20 +41,19 @@ public class SimpleRetryer implements Retryer {
 
     private int retryCount;
 
-    @SafeVarargs
     @Builder
     private SimpleRetryer(int maxRetry,
                           BackoffStrategy backoffStrategy,
-                          Class<? extends Exception>... exceptionTypes) {
+                          @Singular Collection<Class<? extends Exception>> retryableExceptions,
+                          @Singular Collection<Class<? extends Exception>> nonRetryableExceptions) {
         Validate.isTrue(maxRetry > 0, "maxRetry must be greater than 0");
-        Validate.noNullElements(exceptionTypes, "exceptionTypes has a null element at index=%d");
+        Validate.noNullElements(retryableExceptions, "retryableExceptions has a null element at index=%d");
+        Validate.noNullElements(nonRetryableExceptions, "nonRetryableExceptions has a null element at index=%d");
         this.maxRetry = maxRetry;
         this.backoffStrategy = Validate.notNull(backoffStrategy, "backoffStrategy must not be null");
-        this.exceptionTypes = new IdentityHashMap<>(exceptionTypes.length);
-
-        for (Class<?> exceptionType : exceptionTypes) {
-            this.exceptionTypes.put(exceptionType, true);
-        }
+        this.exceptionTypes = new IdentityHashMap<>(retryableExceptions.size());
+        retryableExceptions.forEach(type -> this.exceptionTypes.put(type, true));
+        nonRetryableExceptions.forEach(type -> this.exceptionTypes.put(type, false));
     }
 
     @Override
