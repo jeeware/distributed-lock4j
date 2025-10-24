@@ -14,6 +14,7 @@
 package io.github.jeeware.cloud.lock4j.support;
 
 import io.github.jeeware.cloud.lock4j.BackoffStrategy;
+import io.github.jeeware.cloud.lock4j.Retryer;
 
 import java.time.Duration;
 import java.util.Random;
@@ -23,7 +24,7 @@ import static org.apache.commons.lang3.Validate.isTrue;
 import static org.apache.commons.lang3.Validate.notNull;
 
 /**
- * {@link BackoffStrategy} where {@link #sleep()} causes the current thread to sleep a random duration for each call.
+ * {@link BackoffStrategy} where {@link BackoffStrategy#sleep(Retryer.Context)} causes the current thread to sleep a random duration for each call.
  *
  * @author hbourada
  */
@@ -48,7 +49,7 @@ public class RandomBackoffStrategy implements BackoffStrategy {
     }
 
     @Override
-    public void sleep() throws InterruptedException {
+    public void sleep(Retryer.Context context) throws InterruptedException {
         Thread.sleep(randomSleepInMillis());
     }
 

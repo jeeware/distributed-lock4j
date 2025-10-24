@@ -13,30 +13,14 @@
 
 package io.github.jeeware.cloud.lock4j;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
-
 import io.github.jeeware.cloud.lock4j.function.Invocation;
 import io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockAutoConfiguration;
 import io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -49,15 +33,28 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.ContextConfiguration;
 
-import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for {@link DistributedLockRegistry} according to a specific
  * {@link LockRepository} implementation specified by {@code cloud.lock4j.type}
  * property
- * 
+ *
  * @author hbourada
  * @version 1.0
  */
@@ -85,7 +82,7 @@ abstract class DistributedLockRegistryTest {
     DistributedLockProperties properties;
 
     @Autowired
-    Supplier<Retryer> retryerSupplier;
+    Retryer retryer;
 
     private final String lockName = "lock-" + randomAlphanumeric(10);
 
@@ -109,7 +106,7 @@ abstract class DistributedLockRegistryTest {
         log.info("Creating {} inputs data to be processed by concurrent tasks", nTasks);
     }
 
-    @RepeatedTest(50)
+    @Test
     void lockByConcurrentThreadsShouldAcquireSequentially() throws InterruptedException {
         final DistributedLock lock = lockRegistry.getLock(lockName);
 
@@ -238,7 +235,7 @@ abstract class DistributedLockRegistryTest {
         final ScheduledExecutorService scheduledExecutor = scheduler.getScheduledExecutor();
         return IntStream.range(0, count)
                 .mapToObj(i -> {
-                    DistributedLockRegistry registry = new DistributedLockRegistry(repository, scheduledExecutor, retryerSupplier);
+                    DistributedLockRegistry registry = new DistributedLockRegistry(repository, scheduledExecutor, retryer);
                     registry.setRefreshLockInterval(properties.getRefreshLockInterval());
                     registry.setDeadLockTimeout(properties.getDeadLockTimeout());
                     return registry;

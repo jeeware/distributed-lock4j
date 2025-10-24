@@ -13,6 +13,7 @@
 
 package io.github.jeeware.cloud.lock4j;
 
+import io.github.jeeware.cloud.lock4j.DistributedLockException.CannotAcquire;
 import io.github.jeeware.cloud.lock4j.support.LoggingErrorTask;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -32,8 +33,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -57,7 +56,7 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private final ScheduledExecutorService scheduler;
 
-    private final Supplier<Retryer> retryerSupplier;
+    private final DistributedLockRetryer retryer;
 
     private final AtomicBoolean scheduledTasksStarted;
 
@@ -71,10 +70,10 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private ScheduledFuture<?> unlockDeadLocksFuture;
 
-    public DistributedLockRegistry(LockRepository repository, ScheduledExecutorService scheduler, Supplier<Retryer> retryerSupplier) {
+    public DistributedLockRegistry(LockRepository repository, ScheduledExecutorService scheduler, Retryer retryer) {
         this.repository = Objects.requireNonNull(repository, "repository is null");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null");
-        this.retryerSupplier = Objects.requireNonNull(retryerSupplier, "retryerSupplier is null");
+        this.retryer = new DistributedLockRetryer(retryer);
         this.instanceId = UUID.randomUUID().toString();
         this.locks = new ConcurrentHashMap<>();
         this.scheduledTasksStarted = new AtomicBoolean();
@@ -89,7 +88,7 @@ public class DistributedLockRegistry implements AutoCloseable {
             LOGGER.info("Scheduled tasks for registry {} created.", this);
         }
 
-        return locks.computeIfAbsent(id, k -> new DistributedLockImpl(id));
+        return locks.computeIfAbsent(id, DistributedLockImpl::new);
     }
 
     private ScheduledFuture<?> schedulePeriodically(Runnable task, long initialDelayMillis, long delayMillis) {
@@ -122,8 +121,7 @@ public class DistributedLockRegistry implements AutoCloseable {
     }
 
     public void setInstanceId(String instanceId) {
-        Validate.notEmpty(instanceId, "instanceId is empty");
-        this.instanceId = instanceId;
+        this.instanceId = Validate.notEmpty(instanceId, "instanceId is empty");
     }
 
     public void setRefreshLockInterval(long refreshLockIntervalMillis) {
@@ -146,7 +144,7 @@ public class DistributedLockRegistry implements AutoCloseable {
     }
 
     @RequiredArgsConstructor
-    final class DistributedLockImpl implements DistributedLock, Supplier<Retryer> {
+    final class DistributedLockImpl implements DistributedLock {
 
         final String id;
 
@@ -155,103 +153,46 @@ public class DistributedLockRegistry implements AutoCloseable {
         volatile boolean heldByCurrentProcess;
 
         @Override
-        public void lock() {
-//            jvmLock.lock();
-//            Retryer retryer = null;
-//
-//            do {
-//                try {
-//                    if (repository.acquireLock(id, instanceId)) {
-//                        heldByCurrentProcess = true;
-//                        break;
-//                    }
-//                    repository.awaitReleaseLock(id);
-//                } catch (InterruptedException ie) {
-//                    jvmLock.unlock();
-//                    handleInterruptedException(ie, false);
-//                } catch (Exception e) {
-//                    if (retryer == null) {
-//                        retryer = retryerSupplier.get();
-//                    }
-//                    if (!retryer.retryFor(e)) {
-//                        handleException(e, true);
-//                    }
-//                }
-//            } while (true);
-            jvmLock.lock();
-//            doLock(() -> {
-//                do {
-//                    if (repository.acquireLock(id, instanceId)) {
-//                        heldByCurrentProcess = true;
-//                        return null;
-//                    }
-//                    repository.awaitReleaseLock(id);
-//                } while (true);
-//            });
-        }
-
-        private void handleException(Exception cause, boolean acquire) {
-            if (acquire) {
-                jvmLock.unlock();
-            }
-            throw DistributedLockException.create(acquire, id, instanceId, cause);
-        }
-
         @SneakyThrows
-        private void handleInterruptedException(InterruptedException ie, boolean rethrow) {
-            Thread.currentThread().interrupt();
-            if (rethrow) {
-                throw ie;
-            }
+        public void lock() {
+            lockImpl(AcquireLock.LOCK);
         }
 
         @Override
         public void lockInterruptibly() throws InterruptedException {
-            jvmLock.lockInterruptibly();
-            Retryer retryer = null;
+            lockImpl(AcquireLock.LOCK_INTERRUPTIBLE);
+        }
 
-            do {
-                try {
-                    if (!repository.acquireLock(id, instanceId)) {
-                        repository.awaitReleaseLock(id);
-                    } else if (Thread.interrupted()) {
-                        throw new InterruptedException();
-                    } else {
+        private void lockImpl(AcquireLock acquireLock) throws InterruptedException {
+            acquireLock.apply(jvmLock);
+            final boolean interruptible = acquireLock.isInterruptible();
+            retryer.apply(() -> {
+                do {
+                    if (repository.acquireLock(id, instanceId)) {
                         heldByCurrentProcess = true;
-                        break;
+                        return null;
                     }
-                } catch (InterruptedException ie) {
-                    jvmLock.unlock();
-                    handleInterruptedException(ie, true);
-                } catch (Exception e) {
-                    if (retryer == null) {
-                        retryer = retryerSupplier.get();
+                    if (interruptible && Thread.interrupted()) {
+                        throw new InterruptedException();
                     }
-                    if (!retryer.shouldRetryFor(e)) {
-                        handleException(e, true);
+                    repository.awaitReleaseLock(id);
+                } while (true);
+            }, (exception, context) -> {
+                jvmLock.unlock();
+                if (exception instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                    if (interruptible) {
+                        throw exception;
                     }
                 }
-            } while (true);
+                throw new CannotAcquire(id, instanceId, exception);
+            });
         }
 
         @Override
+        @SneakyThrows
         public boolean tryLock() {
-            if (!jvmLock.tryLock()) {
-                return false;
-            }
-
-            try {
-                if (repository.acquireLock(id, instanceId)) {
-                    heldByCurrentProcess = true;
-                    return true;
-                }
-            } catch (Exception e) {
-                handleException(e, true);
-            }
-
-            jvmLock.unlock();
-
-            return false;
+            return tryLock(0, MILLISECONDS);
         }
 
         @Override
@@ -262,68 +203,49 @@ public class DistributedLockRegistry implements AutoCloseable {
                 return false;
             }
 
-            Retryer retryer = null;
-
-            do {
-                try {
+            return retryer.apply(() -> {
+                do {
                     if (repository.acquireLock(id, instanceId)) {
                         heldByCurrentProcess = true;
                         return true;
                     }
-                    repository.awaitReleaseLock(id, until - System.currentTimeMillis());
-                } catch (InterruptedException ie) {
+                    repository.awaitReleaseLock(id);
+                } while (System.currentTimeMillis() <= until);
+                // can not acquire remote lock after timeout => release local lock
+                jvmLock.unlock();
+                return false;
+            }, (exception, context) -> {
+                jvmLock.unlock();
+                if (exception instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
-                    jvmLock.unlock();
-                    throw ie;
-                } catch (Exception e) {
-                    if (retryer == null) {
-                        retryer = retryerSupplier.get();
-                    }
-                    if (!retryer.shouldRetryFor(e)) {
-                        handleException(e, true);
-                    }
+                    throw exception;
                 }
-            } while (System.currentTimeMillis() <= until);
+                throw new CannotAcquire(id, instanceId, exception);
+            });
+        }
 
-            // can not acquire remote lock after timeout => release local lock
-            jvmLock.unlock();
-
-            return false;
+        private void handleException(Exception cause, boolean acquire) {
+            if (acquire) {
+                jvmLock.unlock();
+            }
+            throw new CannotAcquire(id, instanceId, cause);
         }
 
         @Override
         public void unlock() {
-            Retryer retryer = null;
             do {
                 try {
                     repository.releaseLock(id, instanceId);
                     heldByCurrentProcess = false;
                     break;
                 } catch (Exception e) {
-                    if (retryer == null) {
-                        retryer = retryerSupplier.get();
-                    }
-                    if (!retryer.shouldRetryFor(e)) {
+                    if (!retryer.shouldRetryFor(e, null)) {
                         handleException(e, false);
                     }
                 }
             } while (true);
             locks.remove(id); // lock is no more used => remove it
             jvmLock.unlock();
-        }
-
-        @SneakyThrows
-        private <T> T doLock(Function<Lock, Object> lockFn, Callable<T> callable) {
-            if (Boolean.FALSE.equals(lockFn.apply(jvmLock))) {
-                //noinspection unchecked
-                return (T) Boolean.FALSE;
-            }
-
-            return get().apply(() -> {
-                do {
-                    return callable.call();
-                } while (true);
-            }, null);
         }
 
         boolean tryUnlock() {
@@ -355,14 +277,81 @@ public class DistributedLockRegistry implements AutoCloseable {
                     + ", heldByCurrentProcess=" + heldByCurrentProcess + "]";
         }
 
-        @Override
-        public Retryer get() {
-            return new Retryer.Delegate(retryerSupplier.get()) {
-                @Override
-                public boolean shouldRetryFor(Exception e) {
-                    return !(e instanceof InterruptedException) && super.shouldRetryFor(e);
-                }
-            };
+    }
+
+    static final class DistributedLockRetryer implements Retryer {
+
+        private final Retryer retryer;
+
+        public DistributedLockRetryer(Retryer retryer) {
+            this.retryer = Objects.requireNonNull(retryer, "retryer is null");
         }
+
+        @Override
+        public boolean shouldRetryFor(Exception e, Context context) {
+            return !(e instanceof InterruptedException) && retryer.shouldRetryFor(e, context);
+        }
+
+        @Override
+        public Context createContext() {
+            return retryer.createContext();
+        }
+
+        @Override
+        public void sleep(Context context) throws InterruptedException {
+            retryer.sleep(context);
+        }
+
+        @Override
+        public <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws InterruptedException {
+            try {
+                return Retryer.super.apply(retryTask, recoveryTask);
+            } catch (InterruptedException e) {
+                throw e;
+            } catch (Exception e) {
+                return sneakyThrow(e);
+            }
+        }
+
+        @SneakyThrows
+        private static <T> T sneakyThrow(Exception e) {
+            throw e;
+        }
+
+        //            @SneakyThrows
+//            private <T> T recover(Exception e, Context context) {
+//                jvmLock.unlock();
+//                if (!(e instanceof InterruptedException)) {
+//                    throw DistributedLockException.create(retr, id, instanceId, e);
+//                }
+//                throw e;
+//            }
+//
+
+
+    }
+
+    @FunctionalInterface
+    interface AcquireLock {
+
+        void apply(Lock lock) throws InterruptedException;
+
+        default boolean isInterruptible() {
+            return false;
+        }
+
+        AcquireLock LOCK = Lock::lock;
+
+        AcquireLock LOCK_INTERRUPTIBLE = new AcquireLock() {
+            @Override
+            public void apply(Lock lock) throws InterruptedException {
+                lock.lockInterruptibly();
+            }
+
+            @Override
+            public boolean isInterruptible() {
+                return true;
+            }
+        };
     }
 }

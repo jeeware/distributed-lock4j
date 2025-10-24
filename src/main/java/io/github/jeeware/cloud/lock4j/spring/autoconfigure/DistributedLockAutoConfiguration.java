@@ -22,6 +22,8 @@ import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.LockRepository;
 import io.github.jeeware.cloud.lock4j.Retryer;
+import io.github.jeeware.cloud.lock4j.Watchable;
+import io.github.jeeware.cloud.lock4j.WatchableLockRepository;
 import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.jdbc.SQLDialects;
@@ -62,8 +64,8 @@ import javax.sql.DataSource;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Random;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Supplier;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for distributed locks.
@@ -77,27 +79,31 @@ import java.util.function.Supplier;
 @Import({RedisConfiguration.class})
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, MongoDataAutoConfiguration.class, RedisAutoConfiguration.class})
 @RequiredArgsConstructor
-public class DistributedLockAutoConfiguration {
+public class DistributedLockAutoConfiguration implements AutoCloseable {
 
     private final DistributedLockProperties properties;
+    private ScheduledExecutorService createdScheduler;
 
     @ConditionalOnMissingBean
     @Bean
     public DistributedLockRegistry distributedLockRegistry(LockRepository lockRepository,
                                                            ObjectProvider<ScheduledExecutorService> executorServices,
                                                            ObjectProvider<ThreadPoolTaskScheduler> taskSchedulers,
-                                                           Supplier<Retryer> retryerSupplier) {
+                                                           Retryer retryer) {
         ScheduledExecutorService scheduler = executorServices.getIfUnique();
 
         if (scheduler == null) {
             final ThreadPoolTaskScheduler taskScheduler = taskSchedulers.getIfUnique();
             if (taskScheduler != null) {
                 scheduler = taskScheduler.getScheduledExecutor();
+            } else {
+                createdScheduler = Executors.newSingleThreadScheduledExecutor();
+                scheduler = createdScheduler;
             }
         }
 
         final DistributedLockRegistry registry = new DistributedLockRegistry(lockRepository,
-                scheduler, retryerSupplier);
+                scheduler, retryer);
         registry.setInstanceId(properties.getInstanceId());
         registry.setRefreshLockInterval(properties.getRefreshLockInterval());
         registry.setDeadLockTimeout(properties.getDeadLockTimeout());
@@ -106,8 +112,8 @@ public class DistributedLockAutoConfiguration {
 
     @ConditionalOnMissingBean
     @Bean
-    public Supplier<Retryer> retryerSupplier(BackoffStrategy backoffStrategy) {
-        return () -> SimpleRetryer.builder()
+    public Retryer retryer(BackoffStrategy backoffStrategy) {
+        return SimpleRetryer.builder()
                 .maxRetry(properties.getRetry().getMaxRetry())
                 .backoffStrategy(backoffStrategy)
                 .retryableExceptions(properties.getRetryableExceptions())
@@ -126,6 +132,13 @@ public class DistributedLockAutoConfiguration {
                 .minSleepDuration(properties.getRetry().getMinSleepDuration())
                 .maxSleepDuration(properties.getRetry().getMaxSleepDuration())
                 .build();
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (createdScheduler != null) {
+            createdScheduler.shutdown();
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

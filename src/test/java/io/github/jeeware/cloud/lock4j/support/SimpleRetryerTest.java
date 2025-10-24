@@ -34,7 +34,7 @@ class SimpleRetryerTest {
 
         boolean allRetry = IntStream.range(0, 3)
                 .mapToObj(i -> new IOException(String.valueOf(i)))
-                .allMatch(retryer::shouldRetryFor);
+                .allMatch(e -> retryer.shouldRetryFor(e, retryer.createContext()));
 
         assertThat(allRetry).isTrue();
     }
@@ -45,7 +45,7 @@ class SimpleRetryerTest {
 
         boolean allRetry = Stream.of(new SocketTimeoutException(), new ConnectException(), new SocketException(),
                         new ConnectException())
-                .allMatch(retryer::shouldRetryFor);
+                .allMatch(e -> retryer.shouldRetryFor(e, retryer.createContext()));
 
         assertThat(allRetry).isTrue();
     }
@@ -55,7 +55,7 @@ class SimpleRetryerTest {
         final SimpleRetryer retryer = retryer(2, IOException.class);
 
         boolean allRetry = Stream.of(new IllegalStateException(), new IOException())
-                .allMatch(retryer::shouldRetryFor);
+                .allMatch(e -> retryer.shouldRetryFor(e, retryer.createContext()));
 
         assertThat(allRetry).isFalse();
     }

@@ -38,14 +38,10 @@ public abstract class DistributedLockException extends RuntimeException {
                 "acquire" : "release", lockId, instanceId);
     }
 
-    public static DistributedLockException create(boolean acquire, String lockId, String instanceId, Throwable cause) {
-        return acquire ? new CannotAcquire(lockId, instanceId, cause) : new CannotRelease(lockId, instanceId, cause);
-    }
-
     /**
      * {@link DistributedLockException} raised when a distributed lock can not be acquired for some reason.
      */
-    private static final class CannotAcquire extends DistributedLockException {
+    public static final class CannotAcquire extends DistributedLockException {
 
         public CannotAcquire(String lockId, String instanceId, Throwable cause) {
             super(cause, lockId, instanceId);
@@ -55,7 +51,7 @@ public abstract class DistributedLockException extends RuntimeException {
     /**
      * {@link DistributedLockException} raised when a distributed lock can not be released for some reason
      */
-    private static final class CannotRelease extends DistributedLockException {
+    public static final class CannotRelease extends DistributedLockException {
 
         public CannotRelease(String lockId, String instanceId, Throwable cause) {
             super(cause, lockId, instanceId);

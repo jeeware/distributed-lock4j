@@ -21,5 +21,5 @@ package io.github.jeeware.cloud.lock4j;
  */
 public interface BackoffStrategy {
 
-    void sleep() throws InterruptedException;
+    void sleep(Retryer.Context context) throws InterruptedException;
 }
