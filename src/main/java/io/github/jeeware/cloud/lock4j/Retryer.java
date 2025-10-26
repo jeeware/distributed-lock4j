@@ -57,12 +57,13 @@ public interface Retryer {
             try {
                 return retryTask.call();
             } catch (Exception e) {
-                if (!shouldRetryFor(e, context)) {
+                if (context.isTerminated() || !shouldRetryFor(e, context)) {
                     if (recoveryTask != null) {
                         return recoveryTask.recover(e, context);
                     }
                     throw e;
                 }
+                context.incrementRetryCount();
                 sleep(context);
             }
         } while (true);

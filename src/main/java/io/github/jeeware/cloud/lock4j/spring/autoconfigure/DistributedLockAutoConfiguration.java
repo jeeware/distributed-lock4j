@@ -22,8 +22,6 @@ import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.LockRepository;
 import io.github.jeeware.cloud.lock4j.Retryer;
-import io.github.jeeware.cloud.lock4j.Watchable;
-import io.github.jeeware.cloud.lock4j.WatchableLockRepository;
 import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.jdbc.SQLDialects;

@@ -22,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.task.TaskExecutorBuilder;
@@ -62,9 +64,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ContextConfiguration(classes = DistributedLockRegistryTest.Config.class)
 abstract class DistributedLockRegistryTest {
 
-    private static final int MIN_TIME = 1000; // 1 seconds
+    private static final long MIN_TIME = 1000L; // 1 seconds
 
-    private static final int MAX_TIME = 2000; // 2 seconds
+    private static final long MAX_TIME = 2000L; // 2 seconds
 
     @Autowired
     DistributedLockRegistry lockRegistry;
@@ -106,20 +108,22 @@ abstract class DistributedLockRegistryTest {
         log.info("Creating {} inputs data to be processed by concurrent tasks", nTasks);
     }
 
-    @Test
-    void lockByConcurrentThreadsShouldAcquireSequentially() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void lockByConcurrentThreadsShouldAcquireSequentially(boolean reentrant) throws InterruptedException {
         final DistributedLock lock = lockRegistry.getLock(lockName);
 
         for (int i = 0; i < nTasks; i++) {
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, Invocation.of(DistributedLock::lock)));
+            submitListenableTask(() -> runTask(lock, Invocation.of(DistributedLock::lock), input, reentrant));
         }
 
         waitAndAssert(false);
     }
 
-    @Test
-    void lockByConcurrentProcessesShouldAcquireSequentially() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void lockByConcurrentProcessesShouldAcquireSequentially(boolean reentrant) throws InterruptedException {
         /*
          * We simulate concurrent processes by creating many lock registries as
          * there is a single registry by process in a normal spring application
@@ -130,50 +134,53 @@ abstract class DistributedLockRegistryTest {
         for (int i = 0; i < nTasks; i++) {
             final DistributedLock lock = processLockRegistries[i].getLock(lockName);
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, Invocation.of(DistributedLock::lock)));
+            submitListenableTask(() -> runTask(lock, Invocation.of(DistributedLock::lock), input, reentrant));
         }
 
         waitAndAssert(false);
     }
 
-    @Test
-    void tryLockByConcurrentProcessesShouldRunTaskOnce() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void tryLockByConcurrentProcessesShouldRunTaskOnce(boolean reentrant) throws InterruptedException {
         final DistributedLockRegistry[] processLockRegistries = createLockRegistries();
 
         for (int i = 0; i < nTasks; i++) {
             final DistributedLock lock = processLockRegistries[i].getLock(lockName);
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, DistributedLock::tryLock));
+            submitListenableTask(() -> runTask(lock, DistributedLock::tryLock, input, reentrant));
         }
 
         waitAndAssert(true);
     }
 
-    @Test
-    void tryLockTimeoutByConcurrentProcessesShouldRunAllTasks() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void tryLockTimeoutByConcurrentProcessesShouldRunAllTasks(boolean reentrant) throws InterruptedException {
         final DistributedLockRegistry[] processLockRegistries = createLockRegistries();
 
         for (int i = 0; i < nTasks; i++) {
             final DistributedLock lock = processLockRegistries[i].getLock(lockName);
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, l -> l.tryLock(nTasks * MAX_TIME, MILLISECONDS)));
+            submitListenableTask(() -> runTask(lock, l -> l.tryLock(nTasks * MAX_TIME, MILLISECONDS), input, reentrant));
         }
 
         waitAndAssert(false);
     }
 
-    @Test
-    void lockInterruptiblyByConcurrentProcessesShouldRunAllTasksExceptInterrupted() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void lockInterruptiblyByConcurrentProcessesShouldRunAllTasksExceptInterrupted(boolean reentrant) throws InterruptedException {
         final InterruptibleLockRepository interruptibleRepository = new InterruptibleLockRepository(repository);
         final DistributedLockRegistry[] processLockRegistries = createLockRegistries(nTasks, interruptibleRepository);
 
         for (int i = 0; i < nTasks; i++) {
             final DistributedLock lock = processLockRegistries[i].getLock(lockName);
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, l -> {
+            submitListenableTask(() -> runTask(lock, l -> {
                 l.lockInterruptibly();
                 return null;
-            }));
+            }, input, reentrant));
         }
 
         final Thread awaitingThread = interruptibleRepository.interruptAnyAwaitingThread();
@@ -197,7 +204,7 @@ abstract class DistributedLockRegistryTest {
         for (int i = 0; i < nTasks; i++) {
             final DistributedLock lock = processLockRegistries[i + 1].getLock(lockName);
             final String input = inputs.get(i);
-            submitListenableTask(() -> runTask(lock, input, Invocation.of(DistributedLock::lock)));
+            submitListenableTask(() -> runTask(lock, Invocation.of(DistributedLock::lock), input, false));
         }
 
         // simulate process crash by stopping task and closing registry
@@ -248,21 +255,24 @@ abstract class DistributedLockRegistryTest {
             if (r != null) {
                 results.add(r);
             }
-//            log.debug("on success with r={}, latch={}", r, latch);
+            log.trace("on success with r={}, latch={}", r, latch);
             latch.countDown();
         }, e -> {
             exceptionRef.compareAndSet(null, e);
-//            log.debug("on failure with exception={}, latch={}", e, latch);
+            log.trace("on failure with exception={}, latch={}", e, latch);
             latch.countDown();
         });
     }
 
-    private String runTask(DistributedLock lock, String value, Invocation invocation) throws InterruptedException {
+    private String runTask(DistributedLock lock, Invocation invocation, String value, boolean reentrant) throws InterruptedException {
         final Object hasLock = invocation.apply(lock);
         // cancel task directly in case tryLock returning false
         if (Boolean.FALSE.equals(hasLock)) {
             log.info("task {} has not acquired lock: {}", value, lock);
             return null;
+        }
+        if (reentrant) {
+            invocation.apply(lock);
         }
 
         /*
@@ -273,7 +283,7 @@ abstract class DistributedLockRegistryTest {
             log.info("Start execute task {}", value);
             singletonQueue.add(value);
             assertThat(lock.isHeldByCurrentProcess()).as("lock %s, value=%s", lock, value).isTrue();
-            MILLISECONDS.sleep(RandomUtils.nextInt(MIN_TIME, MAX_TIME));
+            MILLISECONDS.sleep(RandomUtils.nextLong(MIN_TIME, MAX_TIME));
             log.info("End execute task {}", singletonQueue.element());
             return singletonQueue.remove();
         } catch (InterruptedException ie) {
@@ -281,6 +291,9 @@ abstract class DistributedLockRegistryTest {
             throw new IllegalStateException(ie);
         } finally {
             lock.unlock();
+            if (reentrant) {
+                lock.unlock();
+            }
         }
     }
 

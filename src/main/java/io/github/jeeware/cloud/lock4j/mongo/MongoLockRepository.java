@@ -13,20 +13,15 @@
 
 package io.github.jeeware.cloud.lock4j.mongo;
 
-import static com.mongodb.client.model.Filters.and;
-import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.lt;
-import static com.mongodb.client.model.Updates.combine;
-import static com.mongodb.client.model.Updates.set;
-import static org.bson.codecs.configuration.CodecRegistries.fromProviders;
-import static org.bson.codecs.configuration.CodecRegistries.fromRegistries;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
-
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoException;
+import com.mongodb.MongoWriteException;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.result.UpdateResult;
+import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.LockRepository;
 import io.github.jeeware.cloud.lock4j.Watchable;
 import io.github.jeeware.cloud.lock4j.support.AbstractWatchableLockRepository;
 import org.apache.commons.lang3.Validate;
@@ -37,20 +32,23 @@ import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mongodb.ErrorCategory;
-import com.mongodb.MongoException;
-import com.mongodb.MongoWriteException;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.UpdateOptions;
-import com.mongodb.client.result.UpdateResult;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 
-import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
-import io.github.jeeware.cloud.lock4j.LockRepository;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.lt;
+import static com.mongodb.client.model.Updates.combine;
+import static com.mongodb.client.model.Updates.set;
+import static org.bson.codecs.configuration.CodecRegistries.fromProviders;
+import static org.bson.codecs.configuration.CodecRegistries.fromRegistries;
 
 /**
  * {@link LockRepository} implementation using a MongoDB collection.
- * 
+ *
  * @author hbourada
  * @version 1.0
  */
@@ -71,8 +69,8 @@ public class MongoLockRepository extends AbstractWatchableLockRepository {
     private final UpdateOptions upsertOptions;
 
     public MongoLockRepository(MongoDatabase database,
-            String collectionName,
-            ExceptionTranslator<MongoException, ? extends RuntimeException> translator) {
+                               String collectionName,
+                               ExceptionTranslator<MongoException, ? extends RuntimeException> translator) {
         Objects.requireNonNull(database, "database is null");
         Validate.notBlank(collectionName, "collectionName is blank");
         this.collection = getMongoCollection(database, collectionName);

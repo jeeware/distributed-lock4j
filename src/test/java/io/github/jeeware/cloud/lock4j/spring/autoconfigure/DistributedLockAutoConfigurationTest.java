@@ -13,26 +13,27 @@
 
 package io.github.jeeware.cloud.lock4j.spring.autoconfigure;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.util.function.Supplier;
-
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import com.mongodb.MongoClientSettings;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.LockRepository;
+import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.mongo.IdentityExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.mongo.LockEntity;
 import io.github.jeeware.cloud.lock4j.mongo.MongoLockRepository;
 import io.github.jeeware.cloud.lock4j.redis.RedisLockRepository;
 import io.github.jeeware.cloud.lock4j.redis.connection.RedisConnectionFactory;
-import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
+import io.github.jeeware.cloud.lock4j.redis.connection.jedis.JedisConnectionFactory;
+import io.github.jeeware.cloud.lock4j.redis.connection.lettuce.LettuceConnectionFactory;
 import io.github.jeeware.cloud.lock4j.spring.MongoExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.spring.SQLExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.spring.redis.RedisConnectionFactoryAdapter;
 import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
+import io.lettuce.core.RedisURI;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -49,20 +50,17 @@ import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoDbFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.util.SocketUtils;
-
-import com.mongodb.MongoClientSettings;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import io.github.jeeware.cloud.lock4j.redis.connection.jedis.JedisConnectionFactory;
-import io.github.jeeware.cloud.lock4j.redis.connection.lettuce.LettuceConnectionFactory;
-import io.github.jeeware.cloud.lock4j.spring.redis.RedisConnectionFactoryAdapter;
-import io.lettuce.core.RedisURI;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisCluster;
 import redis.clients.jedis.JedisPool;
+
+import java.util.function.Supplier;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DistributedLockAutoConfigurationTest {
 
@@ -89,8 +87,7 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(JdbcLockRepository.class);
                     assertThat(context).hasSingleBean(SQLExceptionTranslator.class);
-                    assertThat(context).getBean(Supplier.class)
-                            .extracting(Supplier::get).isInstanceOf(SimpleRetryer.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
                 });
     }
 
@@ -108,6 +105,7 @@ class DistributedLockAutoConfigurationTest {
     }
 
     @Test
+    @SuppressWarnings({"java:S1874", "deprecation"})
     void distributedLockRegistryCreatedWhenLockTypeIsMongoWithoutDataMongo() {
         contextRunner
                 .withUserConfiguration(MongoDatabaseConfig.class)

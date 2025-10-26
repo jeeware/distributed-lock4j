@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
+
 /**
  * Simple thread safe {@link Retryer} with a max retry count and a set of retryable and non retryable
  * exception base types.
@@ -49,7 +51,7 @@ public class SimpleRetryer implements Retryer {
         Validate.noNullElements(retryableExceptions, "retryableExceptions has a null element at index=%d");
         Validate.noNullElements(nonRetryableExceptions, "nonRetryableExceptions has a null element at index=%d");
         this.maxRetry = maxRetry;
-        this.backoffStrategy = Validate.notNull(backoffStrategy, "backoffStrategy must not be null");
+        this.backoffStrategy = defaultIfNull(backoffStrategy, BackoffStrategy.NO_BACKOFF);
         this.exceptionTypes = new ConcurrentHashMap<>(retryableExceptions.size() + nonRetryableExceptions.size());
         retryableExceptions.forEach(type -> this.exceptionTypes.put(type, true));
         nonRetryableExceptions.forEach(type -> this.exceptionTypes.put(type, false));
@@ -57,10 +59,6 @@ public class SimpleRetryer implements Retryer {
 
     @Override
     public boolean shouldRetryFor(Exception e, Context context) {
-        if (context.isTerminated()) {
-            return false;
-        }
-        context.incrementRetryCount();
         final List<Class<?>> childTypes = new ArrayList<>();
         Class<?> currentType = e.getClass();
         boolean retry = false;

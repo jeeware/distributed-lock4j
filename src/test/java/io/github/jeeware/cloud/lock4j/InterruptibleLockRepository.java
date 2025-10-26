@@ -27,6 +27,7 @@ final class InterruptibleLockRepository implements LockRepository {
 
     private final BlockingQueue<Thread> currentlyAwaitingThreads = new LinkedBlockingQueue<>();
 
+    @Override
     public void awaitReleaseLock(String lockId) throws InterruptedException {
         try {
             currentlyAwaitingThreads.add(Thread.currentThread());
