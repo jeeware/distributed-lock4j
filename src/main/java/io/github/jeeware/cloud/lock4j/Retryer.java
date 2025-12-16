@@ -19,7 +19,8 @@ import lombok.NoArgsConstructor;
 import java.util.concurrent.Callable;
 
 /**
- * Strategy for retrying an operation for a defined exception hierarchy.
+ * Strategy for retrying an operation for a defined exception hierarchy.<p>
+ * {@link Retryer} implementations must be <i>thread-safe</i>
  *
  * @author hbourada
  */

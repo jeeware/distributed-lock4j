@@ -31,6 +31,7 @@ import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
 /**
  * Simple thread safe {@link Retryer} with a max retry count and a set of retryable and non retryable
  * exception base types.
+ * This retryer can track the causes until the root to check if the exception is retryable.
  *
  * @author hbourada
  */
@@ -40,11 +41,14 @@ public class SimpleRetryer implements Retryer {
 
     private final BackoffStrategy backoffStrategy;
 
+    private final boolean trackCauses;
+
     private final Map<Class<?>, Boolean> exceptionTypes;
 
     @Builder
     private SimpleRetryer(int maxRetry,
                           BackoffStrategy backoffStrategy,
+                          Boolean trackCauses,
                           @Singular Collection<Class<? extends Exception>> retryableExceptions,
                           @Singular Collection<Class<? extends Exception>> nonRetryableExceptions) {
         Validate.isTrue(maxRetry > 0, "maxRetry must be greater than 0");
@@ -52,6 +56,7 @@ public class SimpleRetryer implements Retryer {
         Validate.noNullElements(nonRetryableExceptions, "nonRetryableExceptions has a null element at index=%d");
         this.maxRetry = maxRetry;
         this.backoffStrategy = defaultIfNull(backoffStrategy, BackoffStrategy.NO_BACKOFF);
+        this.trackCauses = defaultIfNull(trackCauses, true);
         this.exceptionTypes = new ConcurrentHashMap<>(retryableExceptions.size() + nonRetryableExceptions.size());
         retryableExceptions.forEach(type -> this.exceptionTypes.put(type, true));
         nonRetryableExceptions.forEach(type -> this.exceptionTypes.put(type, false));
@@ -59,8 +64,24 @@ public class SimpleRetryer implements Retryer {
 
     @Override
     public boolean shouldRetryFor(Exception e, Context context) {
+        boolean retry = shouldRetryForChildOf(e);
+
+        if (!retry && trackCauses) {
+            Throwable cause = e.getCause();
+            while (cause != null && !(retry = shouldRetryForChildOf(cause))) {
+                cause = cause.getCause();
+            }
+        }
+
+        return retry;
+    }
+
+    private boolean shouldRetryForChildOf(Throwable throwable) {
+        if (!(throwable instanceof Exception)) {
+            return false;
+        }
         final List<Class<?>> childTypes = new ArrayList<>();
-        Class<?> currentType = e.getClass();
+        Class<?> currentType = throwable.getClass();
         boolean retry = false;
 
         do {
@@ -77,9 +98,7 @@ public class SimpleRetryer implements Retryer {
             final boolean r = retry;
             childTypes.forEach(type -> exceptionTypes.putIfAbsent(type, r));
         }
-
         return retry;
-
     }
 
     @Override

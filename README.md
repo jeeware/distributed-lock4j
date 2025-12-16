@@ -155,3 +155,12 @@ Actually accepted databases are:
 * JDK: 8
 * mongodb java driver: 3.7.0
 * Spring Boot: 1.5
+
+### Who use this library
+![MAIF](images/logo-maif.png "https://connect.maif.fr")
+
+![EDF](images/logo-edf.jpeg "EDF/DIPNN")
+
+
+
+

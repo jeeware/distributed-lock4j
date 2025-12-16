@@ -111,11 +111,13 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
     @ConditionalOnMissingBean
     @Bean
     public Retryer retryer(BackoffStrategy backoffStrategy) {
-        return SimpleRetryer.builder()
-                .maxRetry(properties.getRetry().getMaxRetry())
+        DistributedLockProperties.Retry retry = properties.getRetry();
+        return retry.getMaxRetry() == 0 ? Retryer.NEVER : SimpleRetryer.builder()
+                .maxRetry(retry.getMaxRetry())
                 .backoffStrategy(backoffStrategy)
-                .retryableExceptions(properties.getRetryableExceptions())
-                .nonRetryableExceptions(properties.getNonRetryableExceptions())
+                .trackCauses(retry.isTrackCauses())
+                .retryableExceptions(retry.getRetryableExceptions())
+                .nonRetryableExceptions(retry.getNonRetryableExceptions())
                 .build();
     }
 
@@ -125,10 +127,11 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
     @ConditionalOnMissingBean
     @Bean
     public BackoffStrategy backoffStrategy() {
-        return RandomBackoffStrategy.builder()
+        DistributedLockProperties.Retry retry = properties.getRetry();
+        return retry.getMaxSleepDuration().isZero() ? BackoffStrategy.NO_BACKOFF : RandomBackoffStrategy.builder()
                 .random(new Random())
-                .minSleepDuration(properties.getRetry().getMinSleepDuration())
-                .maxSleepDuration(properties.getRetry().getMaxSleepDuration())
+                .minSleepDuration(retry.getMinSleepDuration())
+                .maxSleepDuration(retry.getMaxSleepDuration())
                 .build();
     }
 

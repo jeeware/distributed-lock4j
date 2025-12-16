@@ -62,11 +62,6 @@ public class DistributedLockProperties {
     @Setter(AccessLevel.NONE)
     private String instanceId = UUID.randomUUID().toString();
 
-    @NonNull
-    private Set<Class<? extends Exception>> retryableExceptions = singleton(TransientDataAccessException.class);
-
-    @NonNull
-    private Set<Class<? extends Exception>> nonRetryableExceptions = Collections.emptySet();
 
     public void setInstanceId(String instanceId) {
         Validate.notEmpty(instanceId, "instanceId is empty");
@@ -88,6 +83,23 @@ public class DistributedLockProperties {
     @Deprecated
     public void setMaxRetry(int maxRetry) {
         retry.setMaxRetry(maxRetry);
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    @DeprecatedConfigurationProperty(replacement = "cloud.lock4j.retry.retryable-exceptions")
+    public Set<Class<? extends Exception>> getRetryableExceptions() {
+        return retry.getRetryableExceptions();
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    public void setRetryableExceptions(Set<Class<? extends Exception>> retryableExceptions) {
+        this.retry.setRetryableExceptions(retryableExceptions);
     }
 
     public enum Type {
@@ -149,9 +161,18 @@ public class DistributedLockProperties {
 
         private int maxRetry = 3;
 
+        private boolean trackCauses = true;
+
         private Duration minSleepDuration = Duration.ofMillis(100);
 
         private Duration maxSleepDuration = Duration.ofMillis(1000);
+
+        @NonNull
+        private Set<Class<? extends Exception>> retryableExceptions = singleton(TransientDataAccessException.class);
+
+        @NonNull
+        private Set<Class<? extends Exception>> nonRetryableExceptions = Collections.emptySet();
+
 
     }
 }

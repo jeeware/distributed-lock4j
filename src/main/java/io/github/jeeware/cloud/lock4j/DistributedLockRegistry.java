@@ -43,7 +43,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * Registry for {@link DistributedLock}
  *
  * @author hbourada
- * @version 1.0
+ * @since 1.0
  */
 public class DistributedLockRegistry implements AutoCloseable {
 

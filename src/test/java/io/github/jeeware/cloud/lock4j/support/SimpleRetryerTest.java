@@ -13,14 +13,18 @@
 
 package io.github.jeeware.cloud.lock4j.support;
 
+import com.mongodb.MongoException;
 import io.github.jeeware.cloud.lock4j.Retryer;
 import io.github.jeeware.cloud.lock4j.Retryer.Context;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.ClosedFileSystemException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
@@ -32,17 +36,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SimpleRetryerTest {
 
     @Test
-    void retryForExactDeclaredException() {
+    void retryForExactDeclaredRetryableExceptionsShouldReturnTrue() {
         Retryer retryer = retryer(3, IOException.class);
         Context context = retryer.createContext();
 
-        boolean allRetry = IntStream.range(0, 3).mapToObj(i -> new IOException(String.valueOf(i))).allMatch(e -> retryer.shouldRetryFor(e, context));
+        boolean allRetry = IntStream.range(0, 3).mapToObj(i -> new IOException(String.valueOf(i)))
+                .allMatch(e -> retryer.shouldRetryFor(e, context));
 
         assertThat(allRetry).isTrue();
+        assertThat(context.getRetryCount()).isZero();
     }
 
     @Test
-    void retryForDescendentException() {
+    void retryForDescendentRetryableExceptionsShouldReturnTrue() {
         Retryer retryer = retryer(3, IOException.class);
         Context context = retryer.createContext();
 
@@ -54,12 +60,26 @@ class SimpleRetryerTest {
 
     @Test
     void retryForNonRetryableException() {
-        Retryer retryer = retryer(2, IOException.class);
+        Retryer retryer = SimpleRetryer.builder().maxRetry(1).nonRetryableException(IOException.class)
+                .nonRetryableException(IllegalStateException.class).build();
         Context context = retryer.createContext();
 
-        boolean allRetry = Stream.of(new IllegalStateException(), new IOException()).allMatch(e -> retryer.shouldRetryFor(e, context));
+        boolean noneMatch = Stream.of(new ClosedFileSystemException(), new AccessDeniedException(""))
+                .noneMatch(e -> retryer.shouldRetryFor(e, context));
 
-        assertThat(allRetry).isFalse();
+        assertThat(noneMatch).isTrue();
+    }
+
+    @Test
+    void retryForRetryableCauseShouldReturnTrue() {
+        Retryer retryer = retryer(1, IOException.class);
+        Context context = retryer.createContext();
+        Exception exception = new DataAccessResourceFailureException("",
+                new MongoException("", new SocketTimeoutException("timeout")));
+
+        boolean retry = retryer.shouldRetryFor(exception, context);
+
+        assertThat(retry).isTrue();
     }
 
     @Test
@@ -93,8 +113,8 @@ class SimpleRetryerTest {
     }
 
     @SafeVarargs
-    private static SimpleRetryer retryer(int maxRetry, Class<? extends Exception>... exceptionTypes) {
-        return SimpleRetryer.builder().maxRetry(maxRetry).retryableExceptions(Arrays.asList(exceptionTypes)).build();
+    private static SimpleRetryer retryer(int maxRetry, Class<? extends Exception>... retryableExceptions) {
+        return SimpleRetryer.builder().maxRetry(maxRetry).retryableExceptions(Arrays.asList(retryableExceptions)).build();
     }
 
 }

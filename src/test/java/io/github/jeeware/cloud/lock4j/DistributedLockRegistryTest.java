@@ -64,7 +64,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ContextConfiguration(classes = DistributedLockRegistryTest.Config.class)
 abstract class DistributedLockRegistryTest {
 
-    private static final long MIN_TIME = 1000L; // 1 seconds
+    private static final long MIN_TIME = 1000L; // 1 second
 
     private static final long MAX_TIME = 2000L; // 2 seconds
 
@@ -266,7 +266,7 @@ abstract class DistributedLockRegistryTest {
 
     private String runTask(DistributedLock lock, Invocation invocation, String value, boolean reentrant) throws InterruptedException {
         final Object hasLock = invocation.apply(lock);
-        // cancel task directly in case tryLock returning false
+        // cancel a task directly in case tryLock returning false
         if (Boolean.FALSE.equals(hasLock)) {
             log.info("task {} has not acquired lock: {}", value, lock);
             return null;
@@ -276,7 +276,7 @@ abstract class DistributedLockRegistryTest {
         }
 
         /*
-         * bounded queue ensure that no other thread / process can add elements
+         * bounded queue ensures that no other thread / process can add elements
          * while lock is acquired by current thread / process.
          */
         try {
@@ -323,7 +323,7 @@ abstract class DistributedLockRegistryTest {
 
         @Bean
         public ThreadPoolTaskScheduler taskScheduler() {
-            return new TaskSchedulerBuilder().poolSize(2).build();
+            return new TaskSchedulerBuilder().poolSize(1).build();
         }
 
         @Bean

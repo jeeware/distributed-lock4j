@@ -14,14 +14,17 @@
 package io.github.jeeware.cloud.lock4j;
 
 /**
- * Backoff strategy waiting between 2 retries.
+ * Backoff strategy waiting between two retries.<p>
+ * {@link BackoffStrategy} implementations must be <i>thread-saf</i>.
  *
  * @author hbourada
+ * @see Retryer
  * @since 1.0.2
  */
 public interface BackoffStrategy {
 
-    BackoffStrategy NO_BACKOFF = context -> {};
+    BackoffStrategy NO_BACKOFF = context -> {
+    };
 
     void sleep(Retryer.Context context) throws InterruptedException;
 }
