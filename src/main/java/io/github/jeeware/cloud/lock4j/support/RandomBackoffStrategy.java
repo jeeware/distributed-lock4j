@@ -15,11 +15,11 @@ package io.github.jeeware.cloud.lock4j.support;
 
 import io.github.jeeware.cloud.lock4j.BackoffStrategy;
 import io.github.jeeware.cloud.lock4j.Retryer;
+import org.apache.commons.lang3.ObjectUtils;
 
 import java.time.Duration;
 import java.util.Random;
 
-import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
 import static org.apache.commons.lang3.Validate.isTrue;
 import static org.apache.commons.lang3.Validate.notNull;
 
@@ -78,8 +78,9 @@ public class RandomBackoffStrategy implements BackoffStrategy {
             return this;
         }
 
+        @SuppressWarnings("deprecation")
         public RandomBackoffStrategy build() {
-            return new RandomBackoffStrategy(defaultIfNull(random, new Random()), minSleepInMillis, maxSleepInMillis);
+            return new RandomBackoffStrategy(ObjectUtils.defaultIfNull(random, new Random()), minSleepInMillis, maxSleepInMillis);
         }
 
     }

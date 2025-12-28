@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
+import static org.apache.commons.lang3.RandomStringUtils.secure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -86,9 +86,9 @@ abstract class DistributedLockRegistryTest {
     @Autowired
     Retryer retryer;
 
-    private final String lockName = "lock-" + randomAlphanumeric(10);
+    private final String lockName = "lock-" + secure().nextAlphanumeric(10);
 
-    private final int nTasks = RandomUtils.nextInt(2, 10);
+    private final int nTasks = RandomUtils.secure().randomInt(2, 10);
 
     private final List<String> inputs = new ArrayList<>(nTasks);
 
@@ -103,7 +103,7 @@ abstract class DistributedLockRegistryTest {
     @BeforeEach
     void setUp() {
         for (int i = 0; i < nTasks; i++) {
-            inputs.add(randomAlphanumeric(20));
+            inputs.add(secure().nextAlphanumeric(20));
         }
         log.info("Creating {} inputs data to be processed by concurrent tasks", nTasks);
     }
@@ -127,7 +127,7 @@ abstract class DistributedLockRegistryTest {
         /*
          * We simulate concurrent processes by creating many lock registries as
          * there is a single registry by process in a normal spring application
-         * then we acquire a lock with same name.
+         * then we acquire a lock with the same name.
          */
         final DistributedLockRegistry[] processLockRegistries = createLockRegistries();
 
@@ -223,7 +223,7 @@ abstract class DistributedLockRegistryTest {
         lock.lock();
         log.info("Start execute task causing deadlock");
         queue.add(new ThreadAndLock(Thread.currentThread(), lock));
-        MILLISECONDS.sleep(2 * properties.getDeadLockTimeout());
+        sleep(2 * properties.getDeadLockTimeout());
         log.info("End execute task causing deadlock");
         lock.unlock(); // on error this is not executed => cause deadlock
     }
@@ -232,6 +232,11 @@ abstract class DistributedLockRegistryTest {
     void newConditionShouldFail() {
         final DistributedLock lock = lockRegistry.getLock(lockName);
         assertThatThrownBy(lock::newCondition).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @SuppressWarnings("java:S2925")
+    private static void sleep(long timeoutMillis) throws InterruptedException {
+        MILLISECONDS.sleep(timeoutMillis);
     }
 
     private DistributedLockRegistry[] createLockRegistries() {
@@ -283,7 +288,7 @@ abstract class DistributedLockRegistryTest {
             log.info("Start execute task {}", value);
             singletonQueue.add(value);
             assertThat(lock.isHeldByCurrentProcess()).as("lock %s, value=%s", lock, value).isTrue();
-            MILLISECONDS.sleep(RandomUtils.nextLong(MIN_TIME, MAX_TIME));
+            sleep(RandomUtils.secure().randomLong(MIN_TIME, MAX_TIME));
             log.info("End execute task {}", singletonQueue.element());
             return singletonQueue.remove();
         } catch (InterruptedException ie) {

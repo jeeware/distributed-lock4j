@@ -20,17 +20,16 @@ import lombok.Setter;
 import org.apache.commons.lang3.Validate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
-import org.springframework.dao.TransientDataAccessException;
 
 import java.nio.charset.Charset;
 import java.time.Duration;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Collections.singleton;
 import static org.springframework.core.io.ResourceLoader.CLASSPATH_URL_PREFIX;
 
 /**
@@ -168,11 +167,22 @@ public class DistributedLockProperties {
         private Duration maxSleepDuration = Duration.ofMillis(1000);
 
         @NonNull
-        private Set<Class<? extends Exception>> retryableExceptions = singleton(TransientDataAccessException.class);
+        private Set<Class<? extends Exception>> retryableExceptions = new HashSet<>();
 
         @NonNull
-        private Set<Class<? extends Exception>> nonRetryableExceptions = Collections.emptySet();
+        private Set<Class<? extends Exception>> nonRetryableExceptions = new HashSet<>();
 
+        @SafeVarargs
+        public final Retry withRetryableException(Class<? extends Exception>... exceptionTypes) {
+            retryableExceptions.addAll(Arrays.asList(exceptionTypes));
+            return this;
+        }
+
+        @SafeVarargs
+        public final Retry withNonRetryableException(Class<? extends Exception>... exceptionTypes) {
+            nonRetryableExceptions.addAll(Arrays.asList(exceptionTypes));
+            return this;
+        }
 
     }
 }

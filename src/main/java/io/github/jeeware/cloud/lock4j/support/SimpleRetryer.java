@@ -18,6 +18,7 @@ import io.github.jeeware.cloud.lock4j.Retryer;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.Singular;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.Validate;
 
 import java.util.ArrayList;
@@ -25,8 +26,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
 
 /**
  * Simple thread safe {@link Retryer} with a max retry count and a set of retryable and non retryable
@@ -46,6 +45,7 @@ public class SimpleRetryer implements Retryer {
     private final Map<Class<?>, Boolean> exceptionTypes;
 
     @Builder
+    @SuppressWarnings("deprecation")
     private SimpleRetryer(int maxRetry,
                           BackoffStrategy backoffStrategy,
                           Boolean trackCauses,
@@ -55,8 +55,8 @@ public class SimpleRetryer implements Retryer {
         Validate.noNullElements(retryableExceptions, "retryableExceptions has a null element at index=%d");
         Validate.noNullElements(nonRetryableExceptions, "nonRetryableExceptions has a null element at index=%d");
         this.maxRetry = maxRetry;
-        this.backoffStrategy = defaultIfNull(backoffStrategy, BackoffStrategy.NO_BACKOFF);
-        this.trackCauses = defaultIfNull(trackCauses, true);
+        this.backoffStrategy = ObjectUtils.defaultIfNull(backoffStrategy, BackoffStrategy.NO_BACKOFF);
+        this.trackCauses = ObjectUtils.defaultIfNull(trackCauses, true);
         this.exceptionTypes = new ConcurrentHashMap<>(retryableExceptions.size() + nonRetryableExceptions.size());
         retryableExceptions.forEach(type -> this.exceptionTypes.put(type, true));
         nonRetryableExceptions.forEach(type -> this.exceptionTypes.put(type, false));

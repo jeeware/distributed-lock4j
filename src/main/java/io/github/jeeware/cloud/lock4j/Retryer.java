@@ -48,26 +48,31 @@ public interface Retryer {
      * @param retryTask    task which will be repeated until {@link #shouldRetryFor(Exception, Context)} returns false
      * @param recoveryTask recovery task executed when retries exhausted
      * @param <T>          result type
-     * @return result returned by the retryTask or recoverTask call
-     * @throws Exception an exception if retry exhausted and recover is null
+     * @return result returned by the {@code retryTask} or {@code recoverTask} call
+     * @throws Exception an exception if retry exhausted and recover is {@code null} or thrown by {@code recoveryTask}
      * @since 1.0.2
      */
     default <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws Exception {
-        Context context = createContext();
-        do {
-            try {
-                return retryTask.call();
-            } catch (Exception e) {
-                if (context.isTerminated() || !shouldRetryFor(e, context)) {
-                    if (recoveryTask != null) {
-                        return recoveryTask.recover(e, context);
-                    }
-                    throw e;
-                }
+        try {
+            return retryTask.call();
+        } catch (Exception e) {
+            Exception lastException = e;
+            Context context = createContext();
+            while (!context.isTerminated() && shouldRetryFor(lastException, context)) {
                 context.incrementRetryCount();
                 sleep(context);
+                try {
+                    return retryTask.call();
+                } catch (Exception ex) {
+                    lastException = ex;
+                }
             }
-        } while (true);
+            if (recoveryTask != null) {
+                return recoveryTask.recover(lastException, context);
+            }
+            throw lastException;
+        }
+
     }
 
     /**

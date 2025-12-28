@@ -20,6 +20,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.LockRepository;
+import io.github.jeeware.cloud.lock4j.Retryer;
 import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.mongo.IdentityExceptionTranslator;
@@ -54,8 +55,6 @@ import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisCluster;
 import redis.clients.jedis.JedisPool;
 
-import java.util.function.Supplier;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -73,7 +72,7 @@ class DistributedLockAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).doesNotHaveBean(DistributedLockRegistry.class);
                     assertThat(context).doesNotHaveBean(LockRepository.class);
-                    assertThat(context).doesNotHaveBean(Supplier.class);
+                    assertThat(context).doesNotHaveBean(Retryer.class);
                 });
     }
 
@@ -101,6 +100,7 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(MongoLockRepository.class);
                     assertThat(context).hasSingleBean(MongoExceptionTranslator.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
                 });
     }
 
@@ -116,6 +116,7 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(MongoLockRepository.class);
                     assertThat(context).hasSingleBean(IdentityExceptionTranslator.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
                 });
     }
 
@@ -149,6 +150,7 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(RedisLockRepository.class);
                     assertThat(context).hasSingleBean(RedisConnectionFactoryAdapter.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
                 });
 
     }

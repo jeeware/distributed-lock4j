@@ -46,7 +46,7 @@
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!--<mongodb.version>3.7.0</mongodb.version>-->
-        <commons-lang3.version>3.3</commons-lang3.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
         <embedded-redis.version>1.4.3</embedded-redis.version>
         <guava.version>33.1.0-jre</guava.version>
         <embed.mongo.version>4.18.0</embed.mongo.version>

@@ -42,7 +42,7 @@ class RedisStandaloneDistributedLockRegistryTest extends DistributedLockRegistry
 
     @DynamicPropertySource
     static void redisPort(DynamicPropertyRegistry registry) {
-        // memoize to return same available port for property
+        // memoize to return the same available port for property
         registry.add("spring.redis.port", SingletonSupplier.of(SocketUtils::findAvailableTcpPort));
     }
 
