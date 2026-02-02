@@ -1,16 +1,27 @@
 ### Presentation
-A distributed lock implementation based on a shared SQL or NoSQL database.
+A distributed _reentrant lock_ implementation based on a shared SQL or NoSQL database.
 
-This library can be used in a Spring Boot or vanilla applications (i.e. without Spring)
+This library can be used in a Spring Boot or vanilla applications (i.e., without Spring)
 
 A Spring Boot Auto-configurer is provided to ease its use.
 
-We can customize default behavior by overriding configuration properties in your `application.properties` 
+This distributed lock can be used to implement _distributed scheduled tasks_ on a multi-instances microservice.
+
+You can customize default behavior by overriding configuration in your `application.properties` 
 or `application.yml` or defining your custom `LockRepository` bean for a particular database. 
 
-#### Spring Boot sample for scheduled job using SQL database:
-
-``` java
+#### Spring Boot sample for a scheduled job using SQL database:
+Add dependency in your build tool (like maven)
+#### **`pom.xml`**
+```xml
+<dependency>
+    <groupId>io.github.jeeware</groupId>
+    <artifactId>distributed-lock4j</artifactId>
+    <version>1.0.2</version>
+</dependency>
+```
+Add annotation in your code
+```java
 import io.github.jeeware.cloud.lock4j.spring.annotation.DistributedLock;
 import io.github.jeeware.cloud.lock4j.spring.annotation.DistributedLock.Mode;
 import io.github.jeeware.cloud.lock4j.spring.annotation.EnableDistributedLock;
@@ -27,7 +38,7 @@ class MyConfig {
 }
 
 @Component
-class MyJobs {
+class MyScheduledJobs {
   // ....
 
   @Scheduled(fixedRate = 60_000)
@@ -38,7 +49,8 @@ class MyJobs {
   }
 }
 ```
-``` yaml
+Customize distributed lock properties
+```yaml
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/mydatabase
@@ -49,7 +61,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 10
+        size: 1
 cloud:
   lock4j:
     jdbc:
@@ -57,34 +69,33 @@ cloud:
     instance-id: ${spring.application.name}-${random.uuid}
     type: jdbc
 ```
-#### Vanilla sample for scheduled job using SQL database:
+#### Vanilla sample for a scheduled job using SQL database:
 
-``` java
-import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
-import io.github.jeeware.cloud.lock4j.LockRepository;
-import io.github.jeeware.cloud.lock4j.Retryer;
+```java
+package io.github.jeeware.demo;
+
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcInitializingLockRepository;
 import io.github.jeeware.cloud.lock4j.jdbc.SQLDialects;
+import io.github.jeeware.cloud.lock4j.support.RandomBackoffStrategy;
 import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
 import org.postgresql.ds.PGSimpleDataSource;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.function.Supplier;
 
-public class MyApplication {
+public class ScheduledJobApplication {
 
   public static void main(String[] args) {
-    ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2); // minimum 2 threads!
-    LockRepository lockRepository = new JdbcInitializingLockRepository(dataSource(), SQLDialects.POSTGRESQL, "locks", null);
+    ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    JdbcInitializingLockRepository lockRepository = new JdbcInitializingLockRepository(dataSource(), SQLDialects.POSTGRESQL, "locks", null);
     lockRepository.initialize(); // create necessary lock tables and functions
-    SimpleRetryer retryer = new SimpleRetryer(3, IOException.class);
-    try (DistributedLockRegistry lockRegistry = new DistributedLockRegistry(lockRepository, scheduler, () -> retryer)) {
+    BackoffStrategy backoffStrategy = RandomBackoffStrategy.builder().maxSleepDuration(Duration.ofSeconds(5)).build();
+    Retryer retryer = SimpleRetryer.builder().maxRetry(3).retryableException(IOException.class).backoffStrategy(backoffStrategy).build();
+    try (DistributedLockRegistry lockRegistry = new DistributedLockRegistry(lockRepository, scheduler, retryer)) {
       scheduler.scheduleAtFixedRate(() -> doEachOneMinute(lockRegistry), 0, 1, TimeUnit.MINUTES);
       // do whatever you want
     } finally {
@@ -100,7 +111,8 @@ public class MyApplication {
   }
 
   private static void doEachOneMinute(DistributedLockRegistry lockRegistry) {
-    if (lockRegistry.getLock("MyLockIdentifierName").tryLock()) {
+    DistributedLock lock = lockRegistry.getLock("MyLockIdentifierName");
+    if (lock.tryLock()) {
       try {
         // Repeated task executed by only one application instance
         // ....
@@ -109,7 +121,32 @@ public class MyApplication {
       }
     }
   }
+}
+```
+#### Spring sample for an api which can be called once a time
 
+```java
+import io.github.jeeware.cloud.lock4j.spring.annotation.DistributedLock;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/users")
+public class MyUserController {
+    
+  private final UserService userService;
+  
+  public MyUserController(UserService userService) {
+      this.userService = userService;
+  }
+    
+  @GetMapping("/me")
+  @DistributedLock
+  public User me() {
+      return userService.getMe();
+  }
 }
 ```
 
@@ -128,3 +165,12 @@ Actually accepted databases are:
 * JDK: 8
 * mongodb java driver: 3.7.0
 * Spring Boot: 1.5
+
+### Who use this library
+![MAIF](images/logo-maif.png "https://connect.maif.fr")
+
+![EDF](images/logo-edf.jpeg "EDF/DIPNN")
+
+
+
+

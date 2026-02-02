@@ -39,7 +39,7 @@ final class LettuceSubscription implements Subscription {
             ((StatefulRedisClusterPubSubConnection<?, ?>) connection).setNodeMessagePropagation(true);
         }
         connection.addListener(listener);
-        redisPubSubConnection.sync().psubscribe(patterns);
+        connection.sync().psubscribe(patterns);
     }
 
     @Override

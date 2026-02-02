@@ -13,26 +13,33 @@
 
 package io.github.jeeware.cloud.lock4j.spring.autoconfigure;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.util.function.Supplier;
-
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoServerException;
+import com.mongodb.MongoSocketException;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.LockRepository;
+import io.github.jeeware.cloud.lock4j.Retryer;
+import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcLockRepository;
 import io.github.jeeware.cloud.lock4j.mongo.IdentityExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.mongo.LockEntity;
 import io.github.jeeware.cloud.lock4j.mongo.MongoLockRepository;
 import io.github.jeeware.cloud.lock4j.redis.RedisLockRepository;
 import io.github.jeeware.cloud.lock4j.redis.connection.RedisConnectionFactory;
-import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
+import io.github.jeeware.cloud.lock4j.redis.connection.jedis.JedisConnectionFactory;
+import io.github.jeeware.cloud.lock4j.redis.connection.lettuce.LettuceConnectionFactory;
 import io.github.jeeware.cloud.lock4j.spring.MongoExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.spring.SQLExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.spring.redis.RedisConnectionFactoryAdapter;
 import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
+import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisCommandTimeoutException;
+import io.lettuce.core.RedisConnectionException;
+import io.lettuce.core.RedisURI;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -45,24 +52,31 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.NonTransientDataAccessException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoDbFactory;
+import org.springframework.data.mongodb.UncategorizedMongoDbException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.util.SocketUtils;
-
-import com.mongodb.MongoClientSettings;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import io.github.jeeware.cloud.lock4j.redis.connection.jedis.JedisConnectionFactory;
-import io.github.jeeware.cloud.lock4j.redis.connection.lettuce.LettuceConnectionFactory;
-import io.github.jeeware.cloud.lock4j.spring.redis.RedisConnectionFactoryAdapter;
-import io.lettuce.core.RedisURI;
 import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisCluster;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.exceptions.JedisConnectionException;
+
+import java.io.IOException;
+import java.util.function.Consumer;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DistributedLockAutoConfigurationTest {
 
@@ -75,7 +89,7 @@ class DistributedLockAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).doesNotHaveBean(DistributedLockRegistry.class);
                     assertThat(context).doesNotHaveBean(LockRepository.class);
-                    assertThat(context).doesNotHaveBean(Supplier.class);
+                    assertThat(context).doesNotHaveBean(Retryer.class);
                 });
     }
 
@@ -89,8 +103,13 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(JdbcLockRepository.class);
                     assertThat(context).hasSingleBean(SQLExceptionTranslator.class);
-                    assertThat(context).getBean(Supplier.class)
-                            .extracting(Supplier::get).isInstanceOf(SimpleRetryer.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
+                    assertThat(context).getBean(DistributedLockProperties.class)
+                            .extracting(DistributedLockProperties::getRetry)
+                            .satisfies(retry -> {
+                                assertThat(retry.getRetryableExceptions()).containsExactly(TransientDataAccessException.class);
+                                assertThat(retry.getNonRetryableExceptions()).containsExactly(NonTransientDataAccessException.class);
+                            });
                 });
     }
 
@@ -104,41 +123,63 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(MongoLockRepository.class);
                     assertThat(context).hasSingleBean(MongoExceptionTranslator.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
+                    assertThat(context).getBean(DistributedLockProperties.class)
+                            .extracting(DistributedLockProperties::getRetry)
+                            .satisfies(retry -> assertThat(retry.getRetryableExceptions())
+                                    .containsExactlyInAnyOrder(DataAccessResourceFailureException.class, UncategorizedMongoDbException.class));
                 });
     }
 
     @Test
+    @SuppressWarnings({"java:S1874", "deprecation"})
     void distributedLockRegistryCreatedWhenLockTypeIsMongoWithoutDataMongo() {
         contextRunner
                 .withUserConfiguration(MongoDatabaseConfig.class)
-                .withPropertyValues("cloud.lock4j.type=mongo")
+                .withPropertyValues("cloud.lock4j.type=mongo",
+                        "cloud.lock4j.retry.non-retryable-exceptions=com.mongodb.MongoServerException")
                 .withClassLoader(new FilteredClassLoader(MongoDatabaseFactory.class, MongoDbFactory.class,
                         org.springframework.data.mongodb.core.MongoExceptionTranslator.class))
                 .run(context -> {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(MongoLockRepository.class);
                     assertThat(context).hasSingleBean(IdentityExceptionTranslator.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
+                    assertThat(context).getBean(DistributedLockProperties.class)
+                            .extracting(DistributedLockProperties::getRetry)
+                            .satisfies(retry -> {
+                                assertThat(retry.getRetryableExceptions())
+                                        .containsExactlyInAnyOrder(MongoSocketException.class, IOException.class);
+                                assertThat(retry.getNonRetryableExceptions())
+                                        .containsExactly(MongoServerException.class);
+                            });
                 });
     }
 
     @Test
     void distributedLockRegistryCreatedWhenLockTypeIsRedisWithJedisPool() {
-        assertWithRedisConfig(RedisJedisPoolConfig.class, JedisConnectionFactory.class);
+        assertWithRedisConfig(RedisJedisPoolConfig.class, JedisConnectionFactory.class,
+                retry -> assertThat(retry.getRetryableExceptions()).containsExactly(JedisConnectionException.class));
     }
 
     @Test
     void distributedLockRegistryCreatedWhenLockTypeIsRedisWithJedisCluster() {
-        assertWithRedisConfig(RedisJedisClusterConfig.class, JedisConnectionFactory.class);
+        assertWithRedisConfig(RedisJedisClusterConfig.class, JedisConnectionFactory.class,
+                retry -> assertThat(retry.getRetryableExceptions()).containsExactly(JedisConnectionException.class));
     }
 
     @Test
     void distributedLockRegistryCreatedWhenLockTypeIsRedisWithLettuceStandalone() {
-        assertWithRedisConfig(RedisLettuceStandaloneConfig.class, LettuceConnectionFactory.class);
+        assertWithRedisConfig(RedisLettuceStandaloneConfig.class, LettuceConnectionFactory.class,
+                retry -> assertThat(retry.getRetryableExceptions()).containsExactlyInAnyOrder(
+                        RedisConnectionException.class, RedisCommandTimeoutException.class));
     }
 
     @Test
     void distributedLockRegistryCreatedWhenLockTypeIsRedisWithLettuceCluster() {
-        assertWithRedisConfig(RedisLettuceClusterConfig.class, LettuceConnectionFactory.class);
+        assertWithRedisConfig(RedisLettuceClusterConfig.class, LettuceConnectionFactory.class,
+                retry -> assertThat(retry.getRetryableExceptions()).containsExactlyInAnyOrder(
+                        RedisConnectionException.class, RedisCommandTimeoutException.class));
     }
 
     @Test
@@ -151,22 +192,44 @@ class DistributedLockAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(RedisLockRepository.class);
                     assertThat(context).hasSingleBean(RedisConnectionFactoryAdapter.class);
+                    assertThat(context).hasSingleBean(SimpleRetryer.class);
+                    assertThat(context).getBean(DistributedLockProperties.class)
+                            .extracting(DistributedLockProperties::getRetry)
+                            .satisfies(retry -> {
+                                assertThat(retry.getRetryableExceptions())
+                                        .containsExactlyInAnyOrder(RedisConnectionFailureException.class, QueryTimeoutException.class);
+                                assertThat(retry.getNonRetryableExceptions())
+                                        .containsExactly(RedisSystemException.class);
+                            });
                 });
 
     }
 
-    private void assertWithRedisConfig(Class<?> configClass, Class<? extends RedisConnectionFactory> connectionFactoryClass) {
+    private void assertWithRedisConfig(Class<?> configClass,
+                                       Class<? extends RedisConnectionFactory> connectionFactoryClass,
+                                       Consumer<DistributedLockProperties.Retry> retryRequirements) {
         contextRunner
                 .withUserConfiguration(configClass)
                 .withPropertyValues("cloud.lock4j.type=redis")
-                .withClassLoader(new FilteredClassLoader(
-                        org.springframework.data.redis.connection.jedis.JedisConnectionFactory.class,
-                        org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory.class))
+                .withClassLoader(new FilteredClassLoader(getHiddenClasses(connectionFactoryClass)))
                 .run(context -> {
                     assertThat(context).hasSingleBean(DistributedLockRegistry.class);
                     assertThat(context).hasSingleBean(RedisLockRepository.class);
                     assertThat(context).hasSingleBean(connectionFactoryClass);
+                    assertThat(context).getBean(DistributedLockProperties.class)
+                            .extracting(DistributedLockProperties::getRetry)
+                            .satisfies(retryRequirements);
                 });
+    }
+
+    private static Class<?>[] getHiddenClasses(Class<? extends RedisConnectionFactory> connectionFactoryClass) {
+        if (JedisConnectionFactory.class == connectionFactoryClass) {
+            return new Class<?>[]{RedisClient.class};
+        }
+        if (LettuceConnectionFactory.class == connectionFactoryClass) {
+            return new Class<?>[]{Jedis.class};
+        }
+        return new Class<?>[0];
     }
 
     @TestConfiguration(proxyBeanMethods = false)

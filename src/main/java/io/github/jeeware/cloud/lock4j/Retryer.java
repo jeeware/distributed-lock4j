@@ -13,15 +13,158 @@
 
 package io.github.jeeware.cloud.lock4j;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+import java.util.concurrent.Callable;
+
 /**
- * Strategy for retrying an operation for a defined exception hierarchy.
- * 
+ * Strategy for retrying an operation for a defined exception hierarchy.<p>
+ * {@link Retryer} implementations must be <i>thread-safe</i>
+ *
  * @author hbourada
  */
 public interface Retryer {
 
-    Retryer NEVER = e -> false;
+    Retryer NEVER = new NeverRetryer();
 
-    boolean retryFor(Exception e);
+    /**
+     * @deprecated use {@link #shouldRetryFor(Exception, Context)} instead
+     */
+    @Deprecated
+    default boolean retryFor(Exception e) {
+        return shouldRetryFor(e, Context.EMPTY);
+    }
+
+    /**
+     * @param e       an exception raised by a task execution
+     * @param context retry context
+     * @return true iff we can retry for the given exception, otherwise false
+     * @since 1.0.2
+     */
+    boolean shouldRetryFor(Exception e, Context context);
+
+    /**
+     * @param retryTask    task which will be repeated until {@link #shouldRetryFor(Exception, Context)} returns false
+     * @param recoveryTask recovery task executed when retries exhausted
+     * @param <T>          result type
+     * @return result returned by the {@code retryTask} or {@code recoverTask} call
+     * @throws Exception an exception if retry exhausted and recover is {@code null} or thrown by {@code recoveryTask}
+     * @since 1.0.2
+     */
+    default <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws Exception {
+        try {
+            return retryTask.call();
+        } catch (Exception e) {
+            Exception lastException = e;
+            Context context = createContext();
+            while (!context.isTerminated() && shouldRetryFor(lastException, context)) {
+                context.incrementRetryCount();
+                sleep(context);
+                try {
+                    return retryTask.call();
+                } catch (Exception ex) {
+                    lastException = ex;
+                }
+            }
+            if (recoveryTask != null) {
+                return recoveryTask.recover(lastException, context);
+            }
+            throw lastException;
+        }
+
+    }
+
+    /**
+     * creates a retry context
+     *
+     * @return a retry context recording infos between retries
+     */
+    Context createContext();
+
+    /**
+     * Mark a pause between retries
+     *
+     * @param context
+     * @throws InterruptedException
+     */
+    void sleep(Context context) throws InterruptedException;
+
+    /**
+     * Recovery callback executed after exhausting all retries
+     *
+     * @param <T> recover returning type
+     */
+    @FunctionalInterface
+    interface Recovery<T> {
+
+        @SuppressWarnings("java:S112")
+        T recover(Exception exception, Context context) throws Exception;
+    }
+
+    /**
+     * Contextual retry object
+     */
+    interface Context {
+
+        Context EMPTY = new EmptyContext();
+
+        int getRetryCount();
+
+        void incrementRetryCount();
+
+        boolean isTerminated();
+    }
+
+    @NoArgsConstructor(access = AccessLevel.PRIVATE)
+    final class EmptyContext implements Context {
+
+        @Override
+        public int getRetryCount() {
+            return 0;
+        }
+
+        @Override
+        public void incrementRetryCount() {
+            // No op
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return true;
+        }
+
+    }
+
+    @NoArgsConstructor(access = AccessLevel.PRIVATE)
+    final class NeverRetryer implements Retryer {
+
+        @Override
+        public boolean shouldRetryFor(Exception e, Context context) {
+            return false;
+        }
+
+        @Override
+        public void sleep(Context context) {
+            // do nothing
+        }
+
+        @Override
+        public <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws Exception {
+            if (recoveryTask == null) {
+                return retryTask.call();
+            }
+            try {
+                return retryTask.call();
+            } catch (Exception e) {
+                return recoveryTask.recover(e, Context.EMPTY);
+            }
+        }
+
+        @Override
+        public Context createContext() {
+            return Context.EMPTY;
+        }
+    }
 
 }

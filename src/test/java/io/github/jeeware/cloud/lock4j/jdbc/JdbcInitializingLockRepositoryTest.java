@@ -54,8 +54,9 @@ class JdbcInitializingLockRepositoryTest {
 
 
     @Test
-    void new_JdbcInitializingLockRepository_should_create_schema() throws SQLException {
-        JdbcInitializingLockRepository lockRepository = new JdbcInitializingLockRepository(dataSource, SQLDialects.MYSQL, "lock", "get_lock");
+    void new_JdbcInitializingLockRepository_should_create_schema() {
+        JdbcInitializingLockRepository lockRepository = new JdbcInitializingLockRepository(dataSource,
+                SQLDialects.MYSQL, "lock", "get_lock");
 
         lockRepository.initialize();
 

@@ -19,14 +19,19 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.apache.commons.lang3.Validate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.dao.TransientDataAccessException;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 
 import java.nio.charset.Charset;
-import java.util.Objects;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.springframework.core.io.ResourceLoader.CLASSPATH_URL_PREFIX;
 
 /**
  * {@link ConfigurationProperties} for distributed lock settings.
@@ -52,28 +57,59 @@ public class DistributedLockProperties {
 
     private long deadLockTimeout = 30000;
 
-    private int maxRetry = 3;
+    private final Retry retry = new Retry();
 
     @Setter(AccessLevel.NONE)
     private String instanceId = UUID.randomUUID().toString();
 
-    @Getter(AccessLevel.NONE)
-    @Setter(AccessLevel.NONE)
-    private Class<?>[] retryableExceptions = {TransientDataAccessException.class};
-
-    @SafeVarargs
-    public final void setRetryableExceptions(Class<? extends Exception>... retryableExceptions) {
-        this.retryableExceptions = Objects.requireNonNull(retryableExceptions, "retryableExceptions is null");
-    }
-
-    @SuppressWarnings("unchecked")
-    public Class<? extends Exception>[] getRetryableExceptions() {
-        return (Class<? extends Exception>[]) retryableExceptions;
-    }
 
     public void setInstanceId(String instanceId) {
         Validate.notEmpty(instanceId, "instanceId is empty");
         this.instanceId = instanceId;
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    @DeprecatedConfigurationProperty(replacement = "cloud.lock4j.retry.max-retry")
+    public int getMaxRetry() {
+        return retry.getMaxRetry();
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    public void setMaxRetry(int maxRetry) {
+        retry.setMaxRetry(maxRetry);
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    @DeprecatedConfigurationProperty(replacement = "cloud.lock4j.retry.retryable-exceptions")
+    public Set<Class<? extends Exception>> getRetryableExceptions() {
+        return retry.getRetryableExceptions();
+    }
+
+    /**
+     * @deprecated moved to {@link #retry} property
+     */
+    @Deprecated
+    public void setRetryableExceptions(Set<Class<? extends Exception>> retryableExceptions) {
+        this.retry.setRetryableExceptions(retryableExceptions);
+    }
+
+    /**
+     * @param customizeFn Retry customization function to apply
+     * @since 1.0.2
+     */
+    static DistributedLockProperties create(UnaryOperator<Retry> customizeFn) {
+        DistributedLockProperties instance = new DistributedLockProperties();
+        customizeFn.apply(instance.retry);
+        return instance;
     }
 
     public enum Type {
@@ -91,7 +127,7 @@ public class DistributedLockProperties {
         private String functionName;
 
         @NonNull
-        private String schemaLocation = DEFAULT_SCHEMA_PATH;
+        private String schemaLocation = CLASSPATH_URL_PREFIX + DEFAULT_SCHEMA_PATH;
 
         private boolean createSchema = true;
 
@@ -126,6 +162,38 @@ public class DistributedLockProperties {
 
         @NonNull
         private String lockPrefix = "lock";
+
+    }
+
+    @Getter
+    @Setter
+    public static final class Retry {
+
+        private int maxRetry = 3;
+
+        private boolean trackCauses = true;
+
+        private Duration minSleepDuration = Duration.ofMillis(100);
+
+        private Duration maxSleepDuration = Duration.ofMillis(1000);
+
+        @NonNull
+        private Set<Class<? extends Exception>> retryableExceptions = new HashSet<>();
+
+        @NonNull
+        private Set<Class<? extends Exception>> nonRetryableExceptions = new HashSet<>();
+
+        @SafeVarargs
+        public final Retry withRetryableException(Class<? extends Exception>... exceptionTypes) {
+            retryableExceptions.addAll(Arrays.asList(exceptionTypes));
+            return this;
+        }
+
+        @SafeVarargs
+        public final Retry withNonRetryableException(Class<? extends Exception>... exceptionTypes) {
+            nonRetryableExceptions.addAll(Arrays.asList(exceptionTypes));
+            return this;
+        }
 
     }
 }

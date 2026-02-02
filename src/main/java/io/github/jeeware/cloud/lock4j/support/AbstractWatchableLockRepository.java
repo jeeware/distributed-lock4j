@@ -13,15 +13,14 @@
 
 package io.github.jeeware.cloud.lock4j.support;
 
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import io.github.jeeware.cloud.lock4j.Watchable;
 import io.github.jeeware.cloud.lock4j.WatchableLockRepository;
 import io.github.jeeware.cloud.lock4j.function.WatchableThreadFactory;
-import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Watchable lock repository base implementation.
@@ -44,11 +43,10 @@ public abstract class AbstractWatchableLockRepository implements WatchableLockRe
         watcher.start();
     }
 
-    public void setThreadFactory(@NonNull ThreadFactory threadFactory) {
+    public void setThreadFactory(ThreadFactory threadFactory) {
         this.threadFactory = WatchableThreadFactory.of(threadFactory);
     }
 
-    @NonNull
     protected abstract Watchable createWatchable();
 
     @Override

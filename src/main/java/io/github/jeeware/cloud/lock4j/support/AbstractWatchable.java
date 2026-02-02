@@ -50,14 +50,14 @@ public abstract class AbstractWatchable implements Watchable {
     @Override
     public void signal(String lockId) {
         Semaphore semaphore = getSemaphore(lockId);
-        if (semaphore.availablePermits() == 0) {
+        if (semaphore.hasQueuedThreads()) {
             semaphore.release();
             log.trace("Semaphore [lockId={}, {}] released", lockId, semaphore);
         }
     }
 
-    private Semaphore getSemaphore(String lock) {
-        return locks.computeIfAbsent(lock, l -> new Semaphore(0));
+    private Semaphore getSemaphore(String lockId) {
+        return locks.computeIfAbsent(lockId, l -> new Semaphore(0));
     }
 
     @Override

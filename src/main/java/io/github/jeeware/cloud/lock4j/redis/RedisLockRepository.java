@@ -142,7 +142,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         RedisConnection connection;
 
         RedisWatchable() {
-            RedisLockKey lockKey = new RedisLockKey(lockPrefix, "", "");
+            RedisLockKey lockKey = newRedisLockKey(lockPrefix, "", "");
             this.idPrefix = lockKey.getId();
             this.lockedByPrefix = lockKey.getLockedBy();
         }
@@ -229,39 +229,5 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         }
 
     }
-
-//    public static void main(String[] args) throws InterruptedException {
-//        final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-//        final ExecutorService executor = Executors.newFixedThreadPool(4);
-//        // final JedisConnectionFactory factory = JedisConnectionFactory.of(new
-//        // JedisPool());
-//        final int nLocks = 10;
-//        final long refreshSec = 2;
-//        final Duration timeout = Duration.ofSeconds(10);
-//        long waitSec = 15;
-//
-//        try (LettuceConnectionFactory factory = LettuceConnectionFactory.createStandalone(RedisURI.create("localhost", 6379));
-//             // LettuceConnectionFactory factory =
-//             // LettuceConnectionFactory.createCluster(ClientResources.create(),
-//             // RedisURI.create("localhost", 6379),
-//             // RedisURI.create("localhost", 16379));
-//             RedisLockRepository repository = new RedisLockRepository(new DefaultRedisLockScripts(), factory, timeout, "lock")) {
-//            repository.start();
-//            final String instanceId = UUID.randomUUID().toString();
-//            scheduler.scheduleWithFixedDelay(() -> repository.refreshActiveLocks(instanceId), refreshSec, refreshSec, TimeUnit.SECONDS);
-//            for (int i = 0; i < nLocks; i++) {
-//                final String lockId = "lock_test" + i / 2;
-//                final boolean acquired = repository.acquireLock(lockId, instanceId);
-//                LOGGER.debug("{} acquired={}", lockId, acquired);
-//            }
-//            TimeUnit.SECONDS.sleep(waitSec);
-//            for (int i = 0; i < nLocks; i++) {
-//                repository.releaseLock("lock_test" + i / 2, instanceId);
-//            }
-//        } finally {
-//            scheduler.shutdownNow();
-//            executor.shutdownNow();
-//        }
-//    }
 
 }
