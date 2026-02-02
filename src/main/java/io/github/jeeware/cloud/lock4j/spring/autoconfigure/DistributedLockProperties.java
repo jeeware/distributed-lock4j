@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -99,6 +100,16 @@ public class DistributedLockProperties {
     @Deprecated
     public void setRetryableExceptions(Set<Class<? extends Exception>> retryableExceptions) {
         this.retry.setRetryableExceptions(retryableExceptions);
+    }
+
+    /**
+     * @param customizeFn Retry customization function to apply
+     * @since 1.0.2
+     */
+    static DistributedLockProperties create(UnaryOperator<Retry> customizeFn) {
+        DistributedLockProperties instance = new DistributedLockProperties();
+        customizeFn.apply(instance.retry);
+        return instance;
     }
 
     public enum Type {

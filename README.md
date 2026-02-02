@@ -11,7 +11,16 @@ You can customize default behavior by overriding configuration in your `applicat
 or `application.yml` or defining your custom `LockRepository` bean for a particular database. 
 
 #### Spring Boot sample for a scheduled job using SQL database:
-
+Add dependency in your build tool (like maven)
+#### **`pom.xml`**
+```xml
+<dependency>
+    <groupId>io.github.jeeware</groupId>
+    <artifactId>distributed-lock4j</artifactId>
+    <version>1.0.2</version>
+</dependency>
+```
+Add annotation in your code
 ```java
 import io.github.jeeware.cloud.lock4j.spring.annotation.DistributedLock;
 import io.github.jeeware.cloud.lock4j.spring.annotation.DistributedLock.Mode;
@@ -40,6 +49,7 @@ class MyScheduledJobs {
   }
 }
 ```
+Customize distributed lock properties
 ```yaml
 spring:
   datasource:

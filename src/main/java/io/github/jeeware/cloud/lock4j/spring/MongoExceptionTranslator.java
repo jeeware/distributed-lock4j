@@ -13,22 +13,30 @@
 
 package io.github.jeeware.cloud.lock4j.spring;
 
-import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
-import org.springframework.dao.DataAccessException;
-
 import com.mongodb.MongoException;
+import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.support.PersistenceExceptionTranslator;
 
 /**
  * {@link ExceptionTranslator} Spring Data Mongo based implementation.
  *
  * @author hbourada
  */
+@RequiredArgsConstructor
 public class MongoExceptionTranslator implements ExceptionTranslator<MongoException, DataAccessException> {
 
-    private final org.springframework.data.mongodb.core.MongoExceptionTranslator delegate;
+    @NonNull
+    private final PersistenceExceptionTranslator delegate;
 
+    /**
+     * @deprecated use {@link #MongoExceptionTranslator(PersistenceExceptionTranslator)}
+     */
+    @Deprecated
     public MongoExceptionTranslator() {
-        this.delegate = new org.springframework.data.mongodb.core.MongoExceptionTranslator();
+        this(new org.springframework.data.mongodb.core.MongoExceptionTranslator());
     }
 
     @Override

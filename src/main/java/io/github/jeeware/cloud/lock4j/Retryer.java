@@ -150,12 +150,12 @@ public interface Retryer {
         }
 
         @Override
-        public <T> T apply(Callable<T> callable, Recovery<T> recoveryTask) throws Exception {
+        public <T> T apply(Callable<T> retryTask, Recovery<T> recoveryTask) throws Exception {
             if (recoveryTask == null) {
-                return callable.call();
+                return retryTask.call();
             }
             try {
-                return callable.call();
+                return retryTask.call();
             } catch (Exception e) {
                 return recoveryTask.recover(e, Context.EMPTY);
             }

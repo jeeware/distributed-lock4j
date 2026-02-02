@@ -15,6 +15,7 @@ package io.github.jeeware.cloud.lock4j.spring.autoconfigure;
 
 import com.mongodb.DB;
 import com.mongodb.MongoException;
+import com.mongodb.MongoSocketException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoDatabase;
 import io.github.jeeware.cloud.lock4j.BackoffStrategy;
@@ -29,6 +30,7 @@ import io.github.jeeware.cloud.lock4j.mongo.IdentityExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.mongo.MongoLockRepository;
 import io.github.jeeware.cloud.lock4j.spring.MongoExceptionTranslator;
 import io.github.jeeware.cloud.lock4j.spring.SQLExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.spring.autoconfigure.DistributedLockProperties.Retry;
 import io.github.jeeware.cloud.lock4j.support.RandomBackoffStrategy;
 import io.github.jeeware.cloud.lock4j.support.SimpleRetryer;
 import lombok.RequiredArgsConstructor;
@@ -44,21 +46,27 @@ import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfigurat
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.autoconfigure.mongo.MongoProperties;
 import org.springframework.boot.jdbc.DatabaseDriver;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.NonTransientDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoDbFactory;
+import org.springframework.data.mongodb.UncategorizedMongoDbException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Random;
@@ -73,7 +81,6 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnExpression("'${cloud.lock4j.type:}'.toLowerCase() != 'none'")
-@EnableConfigurationProperties(DistributedLockProperties.class)
 @Import({RedisConfiguration.class})
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, MongoDataAutoConfiguration.class, RedisAutoConfiguration.class})
 @RequiredArgsConstructor
@@ -111,7 +118,7 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
     @ConditionalOnMissingBean
     @Bean
     public Retryer retryer(BackoffStrategy backoffStrategy) {
-        DistributedLockProperties.Retry retry = properties.getRetry();
+        Retry retry = properties.getRetry();
         return retry.getMaxRetry() == 0 ? Retryer.NEVER : SimpleRetryer.builder()
                 .maxRetry(retry.getMaxRetry())
                 .backoffStrategy(backoffStrategy)
@@ -127,7 +134,7 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
     @ConditionalOnMissingBean
     @Bean
     public BackoffStrategy backoffStrategy() {
-        DistributedLockProperties.Retry retry = properties.getRetry();
+        Retry retry = properties.getRetry();
         return retry.getMaxSleepDuration().isZero() ? BackoffStrategy.NO_BACKOFF : RandomBackoffStrategy.builder()
                 .random(new Random())
                 .minSleepDuration(retry.getMinSleepDuration())
@@ -152,6 +159,14 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
 
         @ConditionalOnMissingBean
         @Bean
+        public DistributedLockProperties distributedLockProperties() {
+            return DistributedLockProperties.create(
+                    r -> r.withRetryableException(TransientDataAccessException.class)
+                            .withNonRetryableException(NonTransientDataAccessException.class));
+        }
+
+        @ConditionalOnMissingBean
+        @Bean
         public LockRepository lockRepository(DataSourceProperties dataSourceProperties,
                                              SQLExceptionTranslator translator,
                                              DistributedLockProperties properties) {
@@ -163,8 +178,15 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
 
         @ConditionalOnMissingBean
         @Bean
-        public SQLExceptionTranslator exceptionTranslator() {
-            return new SQLExceptionTranslator(new SQLErrorCodeSQLExceptionTranslator(dataSource));
+        public SQLExceptionTranslator exceptionTranslator(ObjectProvider<JdbcTemplate> jdbcTemplates) {
+            org.springframework.jdbc.support.SQLExceptionTranslator translator;
+            JdbcTemplate jdbcTemplate = jdbcTemplates.getIfUnique();
+            if (jdbcTemplate != null) {
+                translator = jdbcTemplate.getExceptionTranslator();
+            } else {
+                translator = new SQLErrorCodeSQLExceptionTranslator(dataSource);
+            }
+            return new SQLExceptionTranslator(translator);
         }
 
         @ConditionalOnMissingBean
@@ -196,19 +218,6 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
             return repository;
         }
 
-        @ConditionalOnMissingBean
-        @ConditionalOnClass(org.springframework.data.mongodb.core.MongoExceptionTranslator.class)
-        @Bean
-        public ExceptionTranslator<MongoException, DataAccessException> mongoExceptionTranslator() {
-            return new MongoExceptionTranslator();
-        }
-
-        @ConditionalOnMissingBean
-        @Bean
-        public ExceptionTranslator<MongoException, MongoException> defaultExceptionTranslator() {
-            return new IdentityExceptionTranslator();
-        }
-
         @Configuration(proxyBeanMethods = false)
         @ConditionalOnBean(MongoDatabaseFactory.class)
         static class MongoDatabaseConfiguration {
@@ -217,6 +226,21 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
             @Bean
             public MongoDatabase mongoDatabase(MongoDatabaseFactory databaseFactory) {
                 return databaseFactory.getMongoDatabase();
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public DistributedLockProperties distributedLockProperties() {
+                return DistributedLockProperties.create(
+                        r -> r.withRetryableException(DataAccessResourceFailureException.class,
+                                UncategorizedMongoDbException.class));
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public ExceptionTranslator<MongoException, DataAccessException> mongoExceptionTranslator(
+                    MongoDatabaseFactory databaseFactory) {
+                return new MongoExceptionTranslator(databaseFactory.getExceptionTranslator());
             }
         }
 
@@ -236,6 +260,46 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
                 }
 
                 return dbFactory.getDb();
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public DistributedLockProperties distributedLockProperties() {
+                return DistributedLockProperties.create(
+                        r -> r.withRetryableException(DataAccessResourceFailureException.class,
+                                UncategorizedMongoDbException.class));
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public ExceptionTranslator<MongoException, DataAccessException> mongoExceptionTranslator(
+                    MongoDbFactory dbFactory) {
+                return new MongoExceptionTranslator(dbFactory.getExceptionTranslator());
+            }
+        }
+
+        @SuppressWarnings("deprecation")
+        @ConditionalOnMissingBean({MongoDatabaseFactory.class, MongoDbFactory.class})
+        @Configuration(proxyBeanMethods = false)
+        static class SpringDataMongodbAbsentConfiguration {
+
+            @Bean
+            @ConditionalOnMissingBean
+            public MongoDatabase mongoDatabase(MongoClient mongoClient, MongoProperties mongoProperties) {
+                return mongoClient.getDatabase(mongoProperties.getMongoClientDatabase());
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public DistributedLockProperties distributedLockProperties() {
+                return DistributedLockProperties.create(
+                        r -> r.withRetryableException(MongoSocketException.class, IOException.class));
+            }
+
+            @ConditionalOnMissingBean
+            @Bean
+            public ExceptionTranslator<MongoException, MongoException> mongoExceptionTranslator() {
+                return new IdentityExceptionTranslator();
             }
         }
     }
