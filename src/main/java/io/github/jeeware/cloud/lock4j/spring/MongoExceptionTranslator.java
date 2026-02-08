@@ -32,7 +32,7 @@ public class MongoExceptionTranslator implements ExceptionTranslator<MongoExcept
     private final PersistenceExceptionTranslator delegate;
 
     /**
-     * @deprecated use {@link #MongoExceptionTranslator(PersistenceExceptionTranslator)}
+     * @deprecated use {@code MongoExceptionTranslator(PersistenceExceptionTranslator)}
      */
     @Deprecated
     public MongoExceptionTranslator() {

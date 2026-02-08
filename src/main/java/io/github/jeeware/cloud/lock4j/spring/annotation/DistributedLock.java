@@ -41,7 +41,7 @@ public @interface DistributedLock {
 
     /**
      * Alias for {@link #value()}
-     *
+     * @return lock unique identifier as returned by {@link #value()}
      * @see #value()
      */
     @AliasFor("value")

@@ -29,6 +29,8 @@ public interface Retryer {
     Retryer NEVER = new NeverRetryer();
 
     /**
+     * @param e an exception raised by a task execution
+     * @return true iff we can retry for the given exception, otherwise false
      * @deprecated use {@link #shouldRetryFor(Exception, Context)} instead
      */
     @Deprecated
@@ -85,8 +87,8 @@ public interface Retryer {
     /**
      * Mark a pause between retries
      *
-     * @param context
-     * @throws InterruptedException
+     * @param context the retry context
+     * @throws InterruptedException exception thrown if the current thread is interrupted
      */
     void sleep(Context context) throws InterruptedException;
 

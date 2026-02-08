@@ -129,6 +129,7 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
     }
 
     /**
+     * @return Either {@link BackoffStrategy#NO_BACKOFF} or {@link SimpleRetryer} according to {@code cloud.lock4j.retry.max-sleep-duration}
      * @since 1.0.2
      */
     @ConditionalOnMissingBean
