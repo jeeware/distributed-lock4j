@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.github.jeeware</groupId>
     <artifactId>distributed-lock4j</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.2</version>
     <description>Distributed lock for cloud applications</description>
     <name>Distributed Lock4j</name>
     <packaging>jar</packaging>
@@ -21,7 +21,7 @@
         <connection>scm:git:git@github.com:jeeware/distributed-lock4j.git</connection>
         <developerConnection>scm:git:git@github.com:jeeware/distributed-lock4j.git</developerConnection>
         <url>https://github.com/jeeware/distributed-lock4j</url>
-      <tag>HEAD</tag>
+      <tag>distributed-lock4j-1.0.2</tag>
   </scm>
 
     <developers>
