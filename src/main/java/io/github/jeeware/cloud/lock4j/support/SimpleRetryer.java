@@ -64,38 +64,33 @@ public class SimpleRetryer implements Retryer {
 
     @Override
     public boolean shouldRetryFor(Exception e, Context context) {
-        boolean retry = shouldRetryForChildOf(e);
-
-        if (!retry && trackCauses) {
+        Boolean retry = findCurrentOrParentRetry(e);
+        if (retry == null && trackCauses) {
             Throwable cause = e.getCause();
-            while (cause != null && !(retry = shouldRetryForChildOf(cause))) {
+            while (cause != null && (retry = findCurrentOrParentRetry(cause)) == null) {
                 cause = cause.getCause();
             }
         }
-
-        return retry;
+        return retry != null && retry;
     }
 
-    private boolean shouldRetryForChildOf(Throwable throwable) {
+    private Boolean findCurrentOrParentRetry(Throwable throwable) {
         if (!(throwable instanceof Exception)) {
             return false;
         }
-        final List<Class<?>> childTypes = new ArrayList<>();
         Class<?> currentType = throwable.getClass();
-        boolean retry = false;
-
+        Boolean retry = exceptionTypes.get(currentType);
+        if (retry != null) {
+            return retry;
+        }
+        final List<Class<?>> childTypes = new ArrayList<>();
         do {
-            final Boolean currentRetry = exceptionTypes.get(currentType);
-            if (currentRetry != null) {
-                retry = currentRetry;
-                break;
-            }
             childTypes.add(currentType);
             currentType = currentType.getSuperclass();
-        } while (currentType != Exception.class);
+        } while ((retry = exceptionTypes.get(currentType)) == null && currentType != Exception.class);
 
-        if (!childTypes.isEmpty()) {
-            final boolean r = retry;
+        if (retry != null) {
+            final Boolean r = retry;
             childTypes.forEach(type -> exceptionTypes.putIfAbsent(type, r));
         }
         return retry;
