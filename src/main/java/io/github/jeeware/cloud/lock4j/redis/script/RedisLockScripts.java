@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,23 +13,33 @@
 
 package io.github.jeeware.cloud.lock4j.redis.script;
 
-import lombok.NonNull;
-
 /**
  * Facade interface containing lock redis scripts. All methods must never return
  * <code>null</code> {@link RedisScript}
- * 
+ *
  * @author hbourada
  */
 public interface RedisLockScripts {
 
-    @NonNull
     RedisScript<Long> acquireLock();
 
-    @NonNull
     RedisScript<Long> releaseLock();
 
-    @NonNull
-    RedisScript<Long> refreshActiveLocks();
+    /**
+     *
+     * @return script a script returning a long when evaluated
+     * @deprecated Use {@link #refreshActiveLock()} instead
+     */
+    @Deprecated
+    default RedisScript<Long> refreshActiveLocks() {
+        return refreshActiveLock();
+    }
+
+    /**
+     *
+     * @return script a script returning a long when evaluated
+     * @since 1.0.3
+     */
+    RedisScript<Long> refreshActiveLock();
 
 }

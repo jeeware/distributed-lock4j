@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -27,7 +27,7 @@ package io.github.jeeware.cloud.lock4j.jdbc;
  * )
  * </pre>
  * We use <code>bigint</code> to store epoch of timestamp for locked_at, unlocked_at
- * and lock_heartbeat_at columns which is optimal for performance
+ * and lock_heartbeat_at columns which is optimal for portability and performance
  *
  * @author hbourada
  */
@@ -49,7 +49,7 @@ public interface SQLDialect {
     }
 
     default String getUpdateLockHeartbeat() {
-        return "update %s set lock_heartbeat_at = ? where state = ? and locked_by = ?";
+        return "update %s set lock_heartbeat_at = ? where id = ? and state = ? and locked_by = ?";
     }
 
     default String getUnlock() {

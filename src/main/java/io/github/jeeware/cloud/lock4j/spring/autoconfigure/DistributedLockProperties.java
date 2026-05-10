@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,7 +13,6 @@
 
 package io.github.jeeware.cloud.lock4j.spring.autoconfigure;
 
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -30,6 +29,7 @@ import java.util.UUID;
 import java.util.function.UnaryOperator;
 
 import static io.github.jeeware.cloud.lock4j.jdbc.script.DefaultSqlDatabaseInitializer.DEFAULT_SCHEMA_PATH;
+import static io.github.jeeware.cloud.lock4j.util.Utils.validateNullOrPositive;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.springframework.core.io.ResourceLoader.CLASSPATH_URL_PREFIX;
 
@@ -53,19 +53,24 @@ public class DistributedLockProperties {
 
     private long waitInterval = 100;
 
-    private long refreshLockInterval = 5000;
+    private Duration refreshLockInterval = Duration.ofMillis(5000);
 
-    private long deadLockTimeout = 30000;
+    private Duration deadLockTimeout = Duration.ofMillis(30000);
 
     private final Retry retry = new Retry();
 
-    @Setter(AccessLevel.NONE)
     private String instanceId = UUID.randomUUID().toString();
 
-
     public void setInstanceId(String instanceId) {
-        Validate.notEmpty(instanceId, "instanceId is empty");
-        this.instanceId = instanceId;
+        this.instanceId = Validate.notEmpty(instanceId, "instanceId is empty");
+    }
+
+    public void setRefreshLockInterval(@NonNull Duration refreshLockInterval) {
+        this.refreshLockInterval = validateNullOrPositive(refreshLockInterval, "refreshLockInterval");
+    }
+
+    public void setDeadLockTimeout(@NonNull Duration deadLockTimeout) {
+        this.deadLockTimeout = validateNullOrPositive(deadLockTimeout, "deadLockTimeout");
     }
 
     /**

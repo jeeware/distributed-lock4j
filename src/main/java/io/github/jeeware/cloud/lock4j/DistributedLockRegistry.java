@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,17 +18,23 @@ import io.github.jeeware.cloud.lock4j.DistributedLockException.CannotAcquire;
 import io.github.jeeware.cloud.lock4j.DistributedLockException.CannotRelease;
 import io.github.jeeware.cloud.lock4j.Retryer.Context;
 import io.github.jeeware.cloud.lock4j.support.LoggingErrorTask;
+import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.experimental.Delegate;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +43,9 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static io.github.jeeware.cloud.lock4j.util.Utils.defaultIfNull;
+import static io.github.jeeware.cloud.lock4j.util.Utils.getIfNull;
+import static io.github.jeeware.cloud.lock4j.util.Utils.validateNullOrPositive;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -49,9 +58,9 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DistributedLockRegistry.class);
 
-    private static final int DEFAULT_REFRESH_INTERVAL = 5000;
+    private static final Duration DEFAULT_REFRESH_INTERVAL = Duration.ofMillis(5000);
 
-    private static final int DEFAULT_DEADLOCK_TIMEOUT = 30000;
+    private static final Duration DEFAULT_DEADLOCK_TIMEOUT = Duration.ofMillis(30000);
 
     private final Map<String, DistributedLockImpl> locks;
 
@@ -61,7 +70,7 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private final DistributedLockRetryer retryer;
 
-    private final AtomicBoolean scheduledTasksStarted;
+    private final AtomicBoolean started;
 
     private String instanceId;
 
@@ -69,24 +78,31 @@ public class DistributedLockRegistry implements AutoCloseable {
 
     private long deadLockTimeout;
 
-    private ScheduledFuture<?> refreshLockFuture;
-
     private ScheduledFuture<?> unlockDeadLocksFuture;
 
+    @Deprecated
     public DistributedLockRegistry(LockRepository repository, ScheduledExecutorService scheduler, Retryer retryer) {
+        this(repository, scheduler, retryer, null, null, null);
+    }
+
+    @Builder
+    protected DistributedLockRegistry(LockRepository repository, ScheduledExecutorService scheduler,
+                                      Retryer retryer, String instanceId,
+                                      Duration refreshLockInterval, Duration deadLockTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository is null");
-        this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null");
+        this.scheduler = getIfNull(DisabledShutdownScheduler.of(scheduler), () -> Executors.newScheduledThreadPool(1));
         this.retryer = new DistributedLockRetryer(retryer);
-        this.instanceId = UUID.randomUUID().toString();
+        this.instanceId = getIfNull(instanceId, () -> UUID.randomUUID().toString());
+        this.refreshLockInterval = defaultIfNull(validateNullOrPositive(refreshLockInterval, "refreshLockInterval"),
+                DEFAULT_REFRESH_INTERVAL).toMillis();
+        this.deadLockTimeout = defaultIfNull(validateNullOrPositive(deadLockTimeout, "deadLockTimeout"),
+                DEFAULT_DEADLOCK_TIMEOUT).toMillis();
         this.locks = new ConcurrentHashMap<>();
-        this.scheduledTasksStarted = new AtomicBoolean();
-        this.refreshLockInterval = DEFAULT_REFRESH_INTERVAL;
-        this.deadLockTimeout = DEFAULT_DEADLOCK_TIMEOUT;
+        this.started = new AtomicBoolean();
     }
 
     public DistributedLock getLock(String id) {
-        if (scheduledTasksStarted.compareAndSet(false, true)) {
-            refreshLockFuture = schedulePeriodically(this::refreshActiveLocks, refreshLockInterval, refreshLockInterval);
+        if (started.compareAndSet(false, true)) {
             unlockDeadLocksFuture = schedulePeriodically(this::releaseDeadLocks, 0, deadLockTimeout);
             LOGGER.info("Scheduled tasks for registry {} created.", this);
         }
@@ -98,40 +114,49 @@ public class DistributedLockRegistry implements AutoCloseable {
         return scheduler.scheduleWithFixedDelay(new LoggingErrorTask(task), initialDelayMillis, delayMillis, MILLISECONDS);
     }
 
-    private void refreshActiveLocks() {
-        if (!locks.isEmpty()) {
-            repository.refreshActiveLocks(instanceId);
-        }
-    }
-
     private void releaseDeadLocks() {
         repository.releaseDeadLocks(deadLockTimeout);
     }
 
     @Override
     public void close() {
-        if (scheduledTasksStarted.compareAndSet(true, false)) {
-            boolean refreshCanceled = refreshLockFuture.cancel(true);
+        if (started.compareAndSet(true, false)) {
             boolean unlockCanceled = unlockDeadLocksFuture.cancel(true);
-            LOGGER.info("Closing registry instanceId: {}. Cancel scheduled refresh lock: {}, " +
-                    "cancel scheduled unlock deadlocks: {}", instanceId, refreshCanceled, unlockCanceled);
+            LOGGER.info("Closing registry instanceId: {}. " +
+                    "Cancel scheduled unlock deadlocks: {}", instanceId, unlockCanceled);
             locks.forEach((id, lock) -> {
                 if (lock.tryUnlock()) {
                     LOGGER.info("Successfully unlocked lock id={} when closing registry instanceId: {}", id, instanceId);
                 }
             });
+            scheduler.shutdown();
         }
     }
 
+    /**
+     * @since 1.0.3
+     * @deprecated use {@link DistributedLockRegistryBuilder#instanceId(String)} instead
+     */
+    @Deprecated
     public void setInstanceId(String instanceId) {
         this.instanceId = Validate.notEmpty(instanceId, "instanceId is empty");
     }
 
+    /**
+     * @since 1.0.3
+     * @deprecated {@link DistributedLockRegistryBuilder#refreshLockInterval(Duration)} instead
+     */
+    @Deprecated
     public void setRefreshLockInterval(long refreshLockIntervalMillis) {
         Validate.isTrue(refreshLockIntervalMillis > 0, "refreshLockIntervalMillis > 0");
         this.refreshLockInterval = refreshLockIntervalMillis;
     }
 
+    /**
+     * @since 1.0.3
+     * @deprecated {@link DistributedLockRegistryBuilder#deadLockTimeout(Duration)} instead
+     */
+    @Deprecated
     public void setDeadLockTimeout(long deadLockTimeoutMillis) {
         Validate.isTrue(deadLockTimeoutMillis > 0, "deadLockTimeoutMillis > 0");
         this.deadLockTimeout = deadLockTimeoutMillis;
@@ -155,6 +180,8 @@ public class DistributedLockRegistry implements AutoCloseable {
 
         volatile boolean heldByCurrentProcess;
 
+        volatile ScheduledFuture<?> refreshLockFuture;
+
         @Override
         @SneakyThrows
         public void lock() {
@@ -175,7 +202,7 @@ public class DistributedLockRegistry implements AutoCloseable {
             retryer.apply(() -> {
                 do {
                     if (repository.acquireLock(id, instanceId)) {
-                        heldByCurrentProcess = true;
+                        onAcquiredLock();
                         return null;
                     }
                     if (acquireLock.isInterruptible() && Thread.interrupted()) {
@@ -198,7 +225,7 @@ public class DistributedLockRegistry implements AutoCloseable {
             }
             return retryer.apply(() -> {
                 if (repository.acquireLock(id, instanceId)) {
-                    heldByCurrentProcess = true;
+                    onAcquiredLock();
                     return true;
                 }
                 jvmLock.unlock();
@@ -219,7 +246,7 @@ public class DistributedLockRegistry implements AutoCloseable {
             return retryer.apply(() -> {
                 do {
                     if (repository.acquireLock(id, instanceId)) {
-                        heldByCurrentProcess = true;
+                        onAcquiredLock();
                         return true;
                     }
                     repository.awaitReleaseLock(id, until - System.currentTimeMillis());
@@ -228,6 +255,15 @@ public class DistributedLockRegistry implements AutoCloseable {
                 jvmLock.unlock();
                 return false;
             }, new AcquireLockRecovery<>(true));
+        }
+
+        private void onAcquiredLock() {
+            heldByCurrentProcess = true;
+            refreshLockFuture = schedulePeriodically(this::refreshActiveLock, refreshLockInterval, refreshLockInterval);
+        }
+
+        private void refreshActiveLock() {
+            repository.refreshActiveLock(id, instanceId);
         }
 
         @Override
@@ -240,15 +276,20 @@ public class DistributedLockRegistry implements AutoCloseable {
             if (jvmLock.getHoldCount() == 1) {
                 retryer.apply(() -> {
                     repository.releaseLock(id, instanceId);
-                    heldByCurrentProcess = false;
-                    locks.remove(id); // lock is no more used => remove it
+                    onReleasedLock();
                     return null;
                 }, (exception, context) -> {
-                    locks.remove(id);
+                    onReleasedLock();
                     throw new CannotRelease(id, instanceId, exception);
                 });
             }
             jvmLock.unlock();
+        }
+
+        private void onReleasedLock() {
+            refreshLockFuture.cancel(true);
+            heldByCurrentProcess = false;
+            locks.remove(id); // lock is no more used => remove it
         }
 
         boolean tryUnlock() {
@@ -360,5 +401,26 @@ public class DistributedLockRegistry implements AutoCloseable {
                 return true;
             }
         };
+    }
+
+    @RequiredArgsConstructor
+    static final class DisabledShutdownScheduler implements ScheduledExecutorService {
+
+        @Delegate
+        private final ScheduledExecutorService delegate;
+
+        static DisabledShutdownScheduler of(ScheduledExecutorService delegate) {
+            return delegate == null ? null : new DisabledShutdownScheduler(delegate);
+        }
+
+        @Override
+        public void shutdown() {
+            // Do nothing
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            return Collections.emptyList();
+        }
     }
 }

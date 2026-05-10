@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @UtilityClass
@@ -79,4 +81,20 @@ public class Utils {
         }
         return cl;
     }
+
+    public static <T> T defaultIfNull(T value, T defaultValue) {
+        return value != null ? value : defaultValue;
+    }
+
+    public static <T> T getIfNull(T value, Supplier<T> lazyDefaultValue) {
+        return value != null ? value : lazyDefaultValue.get();
+    }
+
+    public static Duration validateNullOrPositive(Duration duration, String propertyName) {
+        if (duration != null && duration.compareTo(Duration.ZERO) <= 0) {
+            throw new IllegalArgumentException(propertyName + " duration must be positive");
+        }
+        return duration;
+    }
+
 }

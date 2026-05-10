@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,10 +13,16 @@
 
 package io.github.jeeware.cloud.lock4j.jdbc;
 
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.Validate.notBlank;
+import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
+import io.github.jeeware.cloud.lock4j.LockRepository;
+import io.github.jeeware.cloud.lock4j.jdbc.SQLDialect.UpsertType;
+import lombok.AllArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.ToString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import javax.sql.DataSource;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -28,17 +34,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
-import javax.sql.DataSource;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.github.jeeware.cloud.lock4j.ExceptionTranslator;
-import io.github.jeeware.cloud.lock4j.LockRepository;
-import io.github.jeeware.cloud.lock4j.jdbc.SQLDialect.UpsertType;
-import lombok.AllArgsConstructor;
-import lombok.SneakyThrows;
-import lombok.ToString;
+import static java.lang.String.format;
+import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.Validate.notBlank;
 
 /**
  * {@link LockRepository} implementation based on a relational database table.
@@ -71,8 +69,8 @@ public class JdbcLockRepository implements LockRepository {
     private final String findDeadLocksSql;
 
     public JdbcLockRepository(DataSource dataSource, SQLDialect dialect,
-            ExceptionTranslator<SQLException, ? extends RuntimeException> translator,
-            String tableName, String functionName) {
+                              ExceptionTranslator<SQLException, ? extends RuntimeException> translator,
+                              String tableName, String functionName) {
         notBlank(tableName, "tableName is blank");
         this.dataSource = requireNonNull(dataSource, "dataSource is null");
         this.upsertType = requireNonNull(dialect, "dialect is null").upsertType();
@@ -107,11 +105,11 @@ public class JdbcLockRepository implements LockRepository {
     }
 
     @Override
-    public void refreshActiveLocks(String instanceId) {
-        int count = execute("refreshActiveLocks", updateHeartbeatSql, System.currentTimeMillis(),
-                LOCKED, instanceId);
+    public void refreshActiveLock(String lockId, String instanceId) {
+        int count = execute("refreshActiveLocks", updateHeartbeatSql, System.currentTimeMillis(), lockId, LOCKED,
+                instanceId);
         if (count > 0) {
-            LOGGER.debug("{} locks was refreshed for instanceId: {}", count, instanceId);
+            LOGGER.debug("Lock {} was refreshed for instanceId: {}", lockId, instanceId);
         }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -47,8 +47,6 @@ import redis.clients.jedis.util.Pool;
 
 import java.util.Collection;
 
-import static java.time.Duration.ofMillis;
-
 /**
  * Configuration for Redis according to discovered client driver.
  *
@@ -70,7 +68,7 @@ class RedisConfiguration {
                                          DistributedLockProperties properties,
                                          ObjectProvider<WatchableThreadFactory> threadFactories) {
         RedisLockRepository repository = new RedisLockRepository(redisLockScripts, connectionFactory,
-                ofMillis(properties.getDeadLockTimeout()), properties.getRedis().getLockPrefix());
+                properties.getDeadLockTimeout(), properties.getRedis().getLockPrefix());
         WatchableThreadFactory threadFactory = threadFactories.getIfUnique();
         if (threadFactory != null) {
             repository.setThreadFactory(threadFactory);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -107,14 +107,15 @@ public class MongoLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    public void refreshActiveLocks(String instanceId) {
+    public void refreshActiveLock(String lockId, String instanceId) {
         final Instant now = Instant.now();
-        final Bson filter = and(eq(LockEntity.STATE_FIELD, LOCKED), eq(LockEntity.LOCKED_BY_FIELD, instanceId));
+        final Bson filter = and(eq(LockEntity.ID_FIELD, lockId), eq(LockEntity.STATE_FIELD, LOCKED),
+                eq(LockEntity.LOCKED_BY_FIELD, instanceId));
         final Bson update = set(LockEntity.LOCK_HEARTBEAT_AT_FIELD, now);
-        final UpdateResult result = execute(() -> collection.updateMany(filter, update, updateOptions));
+        final UpdateResult result = execute(() -> collection.updateOne(filter, update, updateOptions));
 
         if (result.getModifiedCount() > 0) {
-            LOGGER.debug("{} locks was refreshed for instanceId: {}", result.getModifiedCount(), instanceId);
+            LOGGER.debug("Lock {} was refreshed for instanceId: {}", lockId, instanceId);
         }
     }
 

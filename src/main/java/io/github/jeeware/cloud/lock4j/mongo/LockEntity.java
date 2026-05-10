@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -30,6 +30,8 @@ import lombok.ToString;
 @Getter
 @Setter
 public final class LockEntity {
+
+    static final String ID_FIELD = "_id";
 
     static final String STATE_FIELD = "state";
 

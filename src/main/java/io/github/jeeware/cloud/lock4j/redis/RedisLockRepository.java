@@ -65,7 +65,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
                                Duration expiration, String lockPrefix) {
         requireNonNull(redisLockScripts, "redisLockScripts is null");
         this.acquireLock = redisLockScripts.acquireLock();
-        this.refreshActiveLocks = redisLockScripts.refreshActiveLocks();
+        this.refreshActiveLocks = redisLockScripts.refreshActiveLock();
         this.releaseLock = redisLockScripts.releaseLock();
         this.connectionFactory = requireNonNull(connectionFactory, "connectionFactory is null");
         this.scriptExecutor = connectionFactory.getScriptExecutor();
@@ -74,14 +74,13 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    public void refreshActiveLocks(String instanceId) {
-        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, null, instanceId);
-        final List<String> keys = singletonList(lockKey.getLockedBy());
+    public void refreshActiveLock(String lockId, String instanceId) {
+        final List<String> keys = singletonList(lockId);
         final List<Long> args = singletonList(expirationMillis);
         final Long count = scriptExecutor.execute(refreshActiveLocks, keys, args);
 
         if (count > 0) {
-            LOGGER.debug("{} active lock(s) was refreshed for instanceId: {}", count, instanceId);
+            LOGGER.debug("Lock {} was refreshed for instanceId: {}", lockId, instanceId);
         }
     }
 
