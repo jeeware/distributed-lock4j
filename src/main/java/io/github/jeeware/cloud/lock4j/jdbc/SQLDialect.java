@@ -40,8 +40,12 @@ public interface SQLDialect {
                 "   insert (id, state, locked_at, locked_by, lock_heartbeat_at) " +
                 "   values (v.id, v.state, v.locked_at, v.locked_by, v.lock_heartbeat_at) " +
                 "when matched then " +
-                "   update set state = v.state, locked_at = v.locked_at, locked_by = v.locked_by, " +
+                "   update set state = v.state, locked_at = v.locked_at, unlocked_at = null, locked_by = v.locked_by, " +
                 "   lock_heartbeat_at = v.lock_heartbeat_at where l.state = ?";
+    }
+
+    default String getLockWithClockSkew() {
+        return getLock() + " and (l.locked_at < ? or l.locked_at > ?)";
     }
 
     default UpsertType upsertType() {
@@ -49,7 +53,7 @@ public interface SQLDialect {
     }
 
     default String getUpdateLockHeartbeat() {
-        return "update %s set lock_heartbeat_at = ? where id = ? and state = ? and locked_by = ?";
+        return "update %s set lock_heartbeat_at = ? where id = ?";
     }
 
     default String getUnlock() {

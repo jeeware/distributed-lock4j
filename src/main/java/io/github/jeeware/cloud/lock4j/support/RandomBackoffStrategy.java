@@ -79,7 +79,7 @@ public class RandomBackoffStrategy implements BackoffStrategy {
         }
 
         public RandomBackoffStrategy build() {
-            return new RandomBackoffStrategy(Utils.defaultIfNull(random, new Random()), minSleepInMillis, maxSleepInMillis);
+            return new RandomBackoffStrategy(Utils.getIfNull(random, Random::new), minSleepInMillis, maxSleepInMillis);
         }
 
     }

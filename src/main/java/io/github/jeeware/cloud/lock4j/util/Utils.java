@@ -97,4 +97,47 @@ public class Utils {
         return duration;
     }
 
+    public static <E> boolean contains(E[] array, E element) {
+        for (E e : array) {
+            if (e.equals(element)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isNullOrEmpty(final String value) {
+        return value == null || value.isEmpty();
+    }
+
+    public static Object defaultValue(Class<?> type) {
+        if (type == void.class) {
+            return null;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == byte.class) {
+            return (byte) 0;
+        }
+        if (type == short.class) {
+            return (short) 0;
+        }
+        if (type == char.class) {
+            return (char) 0;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == float.class) {
+            return 0.0f;
+        }
+        if (type == double.class) {
+            return 0.0;
+        }
+        return null;
+    }
 }

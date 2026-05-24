@@ -34,13 +34,16 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.gt;
 import static com.mongodb.client.model.Filters.lt;
+import static com.mongodb.client.model.Filters.or;
 import static com.mongodb.client.model.Updates.combine;
 import static com.mongodb.client.model.Updates.set;
 import static org.bson.codecs.configuration.CodecRegistries.fromProviders;
@@ -88,14 +91,27 @@ public class MongoLockRepository extends AbstractWatchableLockRepository {
 
     @Override
     public boolean acquireLock(String lockId, String instanceId) {
+        return acquireLockImpl(lockId, instanceId, 0);
+    }
+
+    @Override
+    public boolean acquireLockWithClockSkew(String lockId, String instanceId, long clockSkewMillis) {
+        return acquireLockImpl(lockId, instanceId, clockSkewMillis);
+    }
+
+    private boolean acquireLockImpl(String lockId, String instanceId, long clockSkewMillis) {
         final Instant now = Instant.now();
         final LockEntity lock = new LockEntity(lockId, LOCKED, now, null, instanceId, now);
-        final Bson filter = and(eq(lockId), eq(LockEntity.STATE_FIELD, UNLOCKED));
+        final List<Bson> filters = new ArrayList<>(Arrays.asList(eq(lockId), eq(LockEntity.STATE_FIELD, UNLOCKED)));
+        if (clockSkewMillis > 0) {
+            filters.add(or(lt(LockEntity.LOCKED_AT_FIELD, now.minusMillis(clockSkewMillis)),
+                    gt(LockEntity.LOCKED_AT_FIELD, now.plusMillis(clockSkewMillis))));
+        }
         final Bson update = new Document("$set", lock);
 
         return execute(() -> {
             try {
-                final UpdateResult result = collection.updateOne(filter, update, upsertOptions);
+                final UpdateResult result = collection.updateOne(and(filters), update, upsertOptions);
                 return result.getModifiedCount() > 0 || result.getUpsertedId() != null;
             } catch (MongoWriteException e) {
                 if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
@@ -109,13 +125,14 @@ public class MongoLockRepository extends AbstractWatchableLockRepository {
     @Override
     public void refreshActiveLock(String lockId, String instanceId) {
         final Instant now = Instant.now();
-        final Bson filter = and(eq(LockEntity.ID_FIELD, lockId), eq(LockEntity.STATE_FIELD, LOCKED),
-                eq(LockEntity.LOCKED_BY_FIELD, instanceId));
+        final Bson filter = eq(LockEntity.ID_FIELD, lockId);
         final Bson update = set(LockEntity.LOCK_HEARTBEAT_AT_FIELD, now);
         final UpdateResult result = execute(() -> collection.updateOne(filter, update, updateOptions));
 
         if (result.getModifiedCount() > 0) {
             LOGGER.debug("Lock {} was refreshed for instanceId: {}", lockId, instanceId);
+        } else {
+            LOGGER.warn("Lock {} was not refreshed for instanceId: {}", lockId, instanceId);
         }
     }
 

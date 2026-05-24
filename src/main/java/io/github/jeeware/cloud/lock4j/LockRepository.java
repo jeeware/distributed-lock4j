@@ -23,6 +23,14 @@ public interface LockRepository {
 
     /**
      *
+     * @param lockId          the lock identifier
+     * @param instanceId      the instance id
+     * @param clockSkewMillis the clock skew or tolerated time difference.
+     */
+    boolean acquireLockWithClockSkew(String lockId, String instanceId, long clockSkewMillis);
+
+    /**
+     *
      * @param instanceId instance unique identifier to monitor which instance get the lock.
      * @deprecated Use {@link #refreshActiveLock(String, String)} instead, this method will be removed,
      * here only for retro-compatibility.
@@ -74,5 +82,4 @@ public interface LockRepository {
     default boolean isWatchable() {
         return false;
     }
-
 }

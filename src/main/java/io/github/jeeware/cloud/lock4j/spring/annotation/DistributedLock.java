@@ -19,6 +19,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Annotation which force acquiring a distributed lock with a specific mode
@@ -41,18 +42,29 @@ public @interface DistributedLock {
 
     /**
      * Alias for {@link #value()}
+     *
      * @return lock unique identifier as returned by {@link #value()}
      * @see #value()
      */
     @AliasFor("value")
     String id() default "";
 
-    Mode mode() default Mode.LOCK;
+    Mode mode() default Mode.DEFAULT;
 
     /**
-     * @return timeout duration in milliseconds or a placeholder expression
+     * @return timeout duration or a placeholder expression evaluating to a positive duration.
+     * It can be an expression with a unit suffix like 10ms, 1h...etc. or simply 1000 a positive integer in milliseconds.
+     * @see io.github.jeeware.cloud.lock4j.spring.converter.StringToDurationConverter.DurationUnit
      */
     String timeout() default "";
+
+    /**
+     * @return clock skew duration or a placeholder expression evaluating to a positive duration.
+     * It can be an expression with a unit suffix like 10ms, 1h...etc. or simply 1000 a positive integer in milliseconds.
+     * @see io.github.jeeware.cloud.lock4j.spring.converter.StringToDurationConverter.DurationUnit
+     * @since 1.0.3
+     */
+    String clockSkew() default "";
 
     enum Mode {
         /**
@@ -70,6 +82,24 @@ public @interface DistributedLock {
          * Acquire lock by calling:
          * {@link io.github.jeeware.cloud.lock4j.DistributedLock#lockInterruptibly()}
          */
-        LOCK_INTERRUPTIBLE
+        LOCK_INTERRUPTIBLE,
+
+        /**
+         * Try to acquire lock with a clock skew especially for scheduled tasks by calling:
+         * {@link io.github.jeeware.cloud.lock4j.DistributedLock#tryLockWithClockSkew(long, TimeUnit)}
+         */
+        TRY_LOCK_WITH_CLOCK_SKEW,
+
+        /**
+         * Determine the mode according to the annotated method signature.
+         * <ul>
+         *   <li>If {@link #timeout()} is not empty then mode is {@link #TRY_LOCK} with timeout</li>
+         *   <li>If {@link #clockSkew()} is not empty or @{@link org.springframework.scheduling.annotation.Scheduled}
+         *   is present then mode is {@link #TRY_LOCK_WITH_CLOCK_SKEW}</li>
+         *   <li>If method throws an {@link InterruptedException} then mode is {@link #LOCK_INTERRUPTIBLE}</li>
+         *   <li>Otherwise mode is {@link #LOCK}</li>
+         * </ul>
+         */
+        DEFAULT
     }
 }

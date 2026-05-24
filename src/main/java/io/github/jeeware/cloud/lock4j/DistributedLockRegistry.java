@@ -17,18 +17,16 @@ package io.github.jeeware.cloud.lock4j;
 import io.github.jeeware.cloud.lock4j.DistributedLockException.CannotAcquire;
 import io.github.jeeware.cloud.lock4j.DistributedLockException.CannotRelease;
 import io.github.jeeware.cloud.lock4j.Retryer.Context;
+import io.github.jeeware.cloud.lock4j.support.DisabledShutdownScheduler;
 import io.github.jeeware.cloud.lock4j.support.LoggingErrorTask;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import lombok.experimental.Delegate;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -310,6 +308,26 @@ public class DistributedLockRegistry implements AutoCloseable {
             return heldByCurrentProcess;
         }
 
+        @Override
+        @SneakyThrows
+        public boolean tryLockWithClockSkew(long clockSkew, TimeUnit unit) {
+            if (!jvmLock.tryLock()) {
+                return false;
+            }
+            // reentrant lock
+            if (heldByCurrentProcess) {
+                return true;
+            }
+            return retryer.apply(() -> {
+                if (repository.acquireLockWithClockSkew(id, instanceId, unit.toMillis(clockSkew))) {
+                    onAcquiredLock();
+                    return true;
+                }
+                jvmLock.unlock();
+                return false;
+            }, new AcquireLockRecovery<>(false));
+        }
+
         // visible for test
         DistributedLockRegistry getRegistry() {
             return DistributedLockRegistry.this;
@@ -403,24 +421,4 @@ public class DistributedLockRegistry implements AutoCloseable {
         };
     }
 
-    @RequiredArgsConstructor
-    static final class DisabledShutdownScheduler implements ScheduledExecutorService {
-
-        @Delegate
-        private final ScheduledExecutorService delegate;
-
-        static DisabledShutdownScheduler of(ScheduledExecutorService delegate) {
-            return delegate == null ? null : new DisabledShutdownScheduler(delegate);
-        }
-
-        @Override
-        public void shutdown() {
-            // Do nothing
-        }
-
-        @Override
-        public List<Runnable> shutdownNow() {
-            return Collections.emptyList();
-        }
-    }
 }

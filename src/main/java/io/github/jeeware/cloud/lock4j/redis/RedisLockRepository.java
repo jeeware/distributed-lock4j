@@ -99,6 +99,11 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
+    public boolean acquireLockWithClockSkew(String lockId, String instanceId, long clockSkewMillis) {
+        return false;
+    }
+
+    @Override
     public void releaseLock(String lockId, String instanceId) {
         final RedisLockKey lockKey = newRedisLockKey(lockPrefix, lockId, instanceId);
         final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
