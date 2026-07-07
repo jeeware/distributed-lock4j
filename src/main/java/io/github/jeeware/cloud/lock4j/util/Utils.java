@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,9 +19,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @UtilityClass
@@ -78,5 +80,64 @@ public class Utils {
             }
         }
         return cl;
+    }
+
+    public static <T> T defaultIfNull(T value, T defaultValue) {
+        return value != null ? value : defaultValue;
+    }
+
+    public static <T> T getIfNull(T value, Supplier<T> lazyDefaultValue) {
+        return value != null ? value : lazyDefaultValue.get();
+    }
+
+    public static Duration validateNullOrPositive(Duration duration, String propertyName) {
+        if (duration != null && duration.compareTo(Duration.ZERO) <= 0) {
+            throw new IllegalArgumentException(propertyName + " duration must be positive");
+        }
+        return duration;
+    }
+
+    public static <E> boolean contains(E[] array, E element) {
+        for (E e : array) {
+            if (e.equals(element)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isNullOrEmpty(final String value) {
+        return value == null || value.isEmpty();
+    }
+
+    public static Object defaultValue(Class<?> type) {
+        if (type == void.class) {
+            return null;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == byte.class) {
+            return (byte) 0;
+        }
+        if (type == short.class) {
+            return (short) 0;
+        }
+        if (type == char.class) {
+            return (char) 0;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == float.class) {
+            return 0.0f;
+        }
+        if (type == double.class) {
+            return 0.0;
+        }
+        return null;
     }
 }

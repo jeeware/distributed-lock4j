@@ -1,5 +1,3 @@
-local count = 0
-for _, name in ipairs(redis.call('smembers', KEYS[1])) do
-    count = count + redis.call('pexpire', name, ARGV[1]);
-end
-return count
+local ttl = ARGV[1]
+redis.call('pexpire', KEYS[2], ttl) -- do nothing if clockSkew key does not exist
+return redis.call('pexpire', KEYS[1], ttl);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,34 +13,28 @@
 
 package io.github.jeeware.cloud.lock4j.redis;
 
-import java.time.Instant;
-
-import org.apache.commons.lang3.StringUtils;
-
+import io.github.jeeware.cloud.lock4j.util.Utils;
 import lombok.Getter;
 
 @Getter
-public final class RedisLockKey {
+public class RedisLockKey {
 
     private static final char SEPARATOR = ':';
 
-    private static final String LOCKED_BY_FIELD = "locked_by";
+    private static final String CLOCK_SKEW_KEY = "clock_skew";
 
     private final String id;
 
-    private final String lockedBy;
+    private final String clockSkew;
 
-    private final Instant lockedAt;
-
-    public RedisLockKey(String prefix, String id, String instanceId, boolean redisCluster) {
-        final String prefixSeparator = StringUtils.isEmpty(prefix) ? "" : prefix + SEPARATOR;
-        this.lockedBy = prefixSeparator + LOCKED_BY_FIELD + SEPARATOR + instanceId;
-        this.id = prefixSeparator + clusterKeySlot(redisCluster, this.lockedBy) + id;
-        this.lockedAt = Instant.now();
+    public RedisLockKey(String prefix, String id, boolean redisCluster) {
+        final String prefixSeparator = Utils.isNullOrEmpty(prefix) ? "" : prefix + SEPARATOR;
+        this.id = prefixSeparator + id;
+        this.clockSkew = hashtag(this.id, redisCluster) + SEPARATOR + CLOCK_SKEW_KEY;
     }
 
-    private static String clusterKeySlot(boolean redisCluster, String key) {
-        return redisCluster ? '{' + key + '}' : "";
+    private static String hashtag(String key, boolean redisCluster) {
+        return redisCluster ? '{' + key + '}' : key;
     }
 
 }

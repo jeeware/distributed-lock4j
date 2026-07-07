@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -49,7 +49,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
     private final RedisScript<Long> acquireLock;
 
-    private final RedisScript<Long> refreshActiveLocks;
+    private final RedisScript<Long> refreshActiveLock;
 
     private final RedisScript<Long> releaseLock;
 
@@ -65,7 +65,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
                                Duration expiration, String lockPrefix) {
         requireNonNull(redisLockScripts, "redisLockScripts is null");
         this.acquireLock = redisLockScripts.acquireLock();
-        this.refreshActiveLocks = redisLockScripts.refreshActiveLocks();
+        this.refreshActiveLock = redisLockScripts.refreshActiveLock();
         this.releaseLock = redisLockScripts.releaseLock();
         this.connectionFactory = requireNonNull(connectionFactory, "connectionFactory is null");
         this.scriptExecutor = connectionFactory.getScriptExecutor();
@@ -74,26 +74,36 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     }
 
     @Override
-    public void refreshActiveLocks(String instanceId) {
-        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, null, instanceId);
-        final List<String> keys = singletonList(lockKey.getLockedBy());
+    public void refreshActiveLock(String lockId, String instanceId) {
+        final RedisLockKey lockKey = newRedisLockKey(lockId);
+        final List<String> keys = asList(lockKey.getId(), lockKey.getClockSkew());
         final List<Long> args = singletonList(expirationMillis);
-        final Long count = scriptExecutor.execute(refreshActiveLocks, keys, args);
+        final Long count = scriptExecutor.execute(refreshActiveLock, keys, args);
 
         if (count > 0) {
-            LOGGER.debug("{} active lock(s) was refreshed for instanceId: {}", count, instanceId);
+            LOGGER.debug("Lock {} was refreshed for instanceId: {}", lockId, instanceId);
         }
     }
 
-    private RedisLockKey newRedisLockKey(String lockPrefix, String id, String instanceId) {
-        return new RedisLockKey(lockPrefix, id, instanceId, connectionFactory.isRedisCluster());
+    protected RedisLockKey newRedisLockKey(String id) {
+        return new RedisLockKey(lockPrefix, id, connectionFactory.isRedisCluster());
     }
 
     @Override
     public boolean acquireLock(String lockId, String instanceId) {
-        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, lockId, instanceId);
-        final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
-        final List<Object> args = asList(lockKey.getLockedAt(), expirationMillis);
+        final RedisLockKey lockKey = newRedisLockKey(lockId);
+        final List<String> keys = singletonList(lockKey.getId());
+        final List<Object> args = asList(instanceId, expirationMillis);
+        final Long result = scriptExecutor.execute(acquireLock, keys, args);
+
+        return ACQUIRED == result;
+    }
+
+    @Override
+    public boolean acquireLockWithClockSkew(String lockId, String instanceId, long clockSkewMillis) {
+        final RedisLockKey lockKey = newRedisLockKey(lockId);
+        final List<String> keys = asList(lockKey.getId(), lockKey.getClockSkew());
+        final List<Object> args = asList(instanceId, expirationMillis, clockSkewMillis);
         final Long result = scriptExecutor.execute(acquireLock, keys, args);
 
         return ACQUIRED == result;
@@ -101,8 +111,8 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
     @Override
     public void releaseLock(String lockId, String instanceId) {
-        final RedisLockKey lockKey = newRedisLockKey(lockPrefix, lockId, instanceId);
-        final List<String> keys = asList(lockKey.getId(), lockKey.getLockedBy());
+        final RedisLockKey lockKey = newRedisLockKey(lockId);
+        final List<String> keys = asList(lockKey.getId(), lockKey.getClockSkew());
         final Long count = scriptExecutor.execute(releaseLock, keys, null);
         LOGGER.debug("{} lock id: {} was released for instanceId: {}", count, lockId, instanceId);
     }
@@ -111,7 +121,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
     public void releaseDeadLocks(long timeoutInterval) {
         // Do nothing as Redis server removes expired lock keys automatically,
         // and we are listening `del` and `expired` events to remove lock from
-        // *:locked_by:* set members
+        // *:lock:* keys
     }
 
     @Override
@@ -137,14 +147,14 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
 
         final String idPrefix;
 
-        final String lockedByPrefix;
+        final String clockSkewPrefix;
 
         RedisConnection connection;
 
         RedisWatchable() {
-            RedisLockKey lockKey = newRedisLockKey(lockPrefix, "", "");
+            RedisLockKey lockKey = newRedisLockKey("");
             this.idPrefix = lockKey.getId();
-            this.lockedByPrefix = lockKey.getLockedBy();
+            this.clockSkewPrefix = lockKey.getClockSkew();
         }
 
         @Override
@@ -152,7 +162,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
             connection = connectionFactory.getConnection();
             // load all scripts to Redis server to get theirs sha1
             try {
-                final List<RedisScript<?>> scripts = asList(acquireLock, refreshActiveLocks, releaseLock);
+                final List<RedisScript<?>> scripts = asList(acquireLock, refreshActiveLock, releaseLock);
                 scripts.forEach(script -> {
                     final String sha = connection.scriptLoad(script.getScriptAsString());
                     script.setSha1(sha);
@@ -212,7 +222,7 @@ public class RedisLockRepository extends AbstractWatchableLockRepository {
         @Override
         public void onMessage(String pattern, String channel, String message) {
             if (message.startsWith(idPrefix) && (channel.endsWith("expired")
-                    || channel.endsWith("del") && !message.startsWith(lockedByPrefix))) {
+                    || channel.endsWith("del") && !message.startsWith(clockSkewPrefix))) {
                 final String lockId = message.substring(idPrefix.length());
                 this.signal(lockId);
             }

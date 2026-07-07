@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -61,7 +61,6 @@ import org.springframework.data.mongodb.MongoDbFactory;
 import org.springframework.data.mongodb.UncategorizedMongoDbException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
@@ -70,8 +69,6 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for distributed locks.
@@ -84,35 +81,20 @@ import java.util.concurrent.ScheduledExecutorService;
 @Import({RedisConfiguration.class})
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, MongoDataAutoConfiguration.class, RedisAutoConfiguration.class})
 @RequiredArgsConstructor
-public class DistributedLockAutoConfiguration implements AutoCloseable {
+public class DistributedLockAutoConfiguration {
 
     private final DistributedLockProperties properties;
-    private ScheduledExecutorService createdScheduler;
 
     @ConditionalOnMissingBean
     @Bean
-    public DistributedLockRegistry distributedLockRegistry(LockRepository lockRepository,
-                                                           ObjectProvider<ScheduledExecutorService> executorServices,
-                                                           ObjectProvider<ThreadPoolTaskScheduler> taskSchedulers,
-                                                           Retryer retryer) {
-        ScheduledExecutorService scheduler = executorServices.getIfUnique();
-
-        if (scheduler == null) {
-            final ThreadPoolTaskScheduler taskScheduler = taskSchedulers.getIfUnique();
-            if (taskScheduler != null) {
-                scheduler = taskScheduler.getScheduledExecutor();
-            } else {
-                createdScheduler = Executors.newSingleThreadScheduledExecutor();
-                scheduler = createdScheduler;
-            }
-        }
-
-        final DistributedLockRegistry registry = new DistributedLockRegistry(lockRepository,
-                scheduler, retryer);
-        registry.setInstanceId(properties.getInstanceId());
-        registry.setRefreshLockInterval(properties.getRefreshLockInterval());
-        registry.setDeadLockTimeout(properties.getDeadLockTimeout());
-        return registry;
+    public DistributedLockRegistry distributedLockRegistry(LockRepository lockRepository, Retryer retryer) {
+        return DistributedLockRegistry.builder()
+                .repository(lockRepository)
+                .retryer(retryer)
+                .instanceId(properties.getInstanceId())
+                .refreshLockInterval(properties.getRefreshLockInterval())
+                .deadLockTimeout(properties.getDeadLockTimeout())
+                .build();
     }
 
     @ConditionalOnMissingBean
@@ -141,13 +123,6 @@ public class DistributedLockAutoConfiguration implements AutoCloseable {
                 .minSleepDuration(retry.getMinSleepDuration())
                 .maxSleepDuration(retry.getMaxSleepDuration())
                 .build();
-    }
-
-    @Override
-    public void close() throws Exception {
-        if (createdScheduler != null) {
-            createdScheduler.shutdown();
-        }
     }
 
     @Configuration(proxyBeanMethods = false)

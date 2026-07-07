@@ -43,12 +43,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.commons.lang3.RandomStringUtils.secure;
+import static org.apache.commons.lang3.RandomStringUtils.insecure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -78,17 +77,14 @@ abstract class DistributedLockRegistryTest {
     LockRepository repository;
 
     @Autowired
-    ThreadPoolTaskScheduler scheduler;
-
-    @Autowired
     DistributedLockProperties properties;
 
     @Autowired
     Retryer retryer;
 
-    private final String lockName = "lock-" + secure().nextAlphanumeric(10);
+    private final String lockName = "lock-" + insecure().nextAlphanumeric(10);
 
-    private final int nTasks = RandomUtils.secure().randomInt(2, 10);
+    private final int nTasks = RandomUtils.insecure().randomInt(2, 8);
 
     private final List<String> inputs = new ArrayList<>(nTasks);
 
@@ -100,10 +96,14 @@ abstract class DistributedLockRegistryTest {
 
     private final Set<String> results = new CopyOnWriteArraySet<>();
 
+    private long taskMinTime = MIN_TIME;
+
+    private long taskMaxTime = MAX_TIME;
+
     @BeforeEach
     void setUp() {
         for (int i = 0; i < nTasks; i++) {
-            inputs.add(secure().nextAlphanumeric(20));
+            inputs.add(insecure().nextAlphanumeric(20));
         }
         log.info("Creating {} inputs data to be processed by concurrent tasks", nTasks);
     }
@@ -149,6 +149,32 @@ abstract class DistributedLockRegistryTest {
             final DistributedLock lock = processLockRegistries[i].getLock(lockName);
             final String input = inputs.get(i);
             submitListenableTask(() -> runTask(lock, DistributedLock::tryLock, input, reentrant));
+        }
+
+        waitAndAssert(true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void tryLockWithClockSkewByConcurrentProcessesInNearlySameInstantShouldRunTaskOnce(boolean reentrant) throws InterruptedException {
+        // simulate short task
+        this.taskMinTime = 50;
+        this.taskMaxTime = 200;
+        final DistributedLockRegistry[] processLockRegistries = createLockRegistries();
+        final long clockSkew = RandomUtils.insecure().randomLong(nTasks * taskMaxTime, 2 * nTasks * taskMaxTime);
+        final CountDownLatch startSignal = new CountDownLatch(nTasks);
+
+        for (int i = 0; i < nTasks; i++) {
+            final DistributedLock lock = processLockRegistries[i].getLock(lockName);
+            final String input = inputs.get(i);
+            final long waitMillis = i * clockSkew / nTasks;
+            submitListenableTask(() -> {
+                startSignal.await();
+                log.debug("Waiting for {}ms before running the task {} with lock={}", waitMillis, input, lock);
+                sleep(waitMillis);
+                return runTask(lock, l -> l.tryLockWithClockSkew(clockSkew, MILLISECONDS), input, reentrant);
+            });
+            startSignal.countDown();
         }
 
         waitAndAssert(true);
@@ -223,7 +249,7 @@ abstract class DistributedLockRegistryTest {
         lock.lock();
         log.info("Start execute task causing deadlock");
         queue.add(new ThreadAndLock(Thread.currentThread(), lock));
-        sleep(2 * properties.getDeadLockTimeout());
+        sleep(2 * properties.getDeadLockTimeout().toMillis());
         log.info("End execute task causing deadlock");
         lock.unlock(); // on error this is not executed => cause deadlock
     }
@@ -244,14 +270,13 @@ abstract class DistributedLockRegistryTest {
     }
 
     private DistributedLockRegistry[] createLockRegistries(int count, LockRepository repository) {
-        final ScheduledExecutorService scheduledExecutor = scheduler.getScheduledExecutor();
         return IntStream.range(0, count)
-                .mapToObj(i -> {
-                    DistributedLockRegistry registry = new DistributedLockRegistry(repository, scheduledExecutor, retryer);
-                    registry.setRefreshLockInterval(properties.getRefreshLockInterval());
-                    registry.setDeadLockTimeout(properties.getDeadLockTimeout());
-                    return registry;
-                })
+                .mapToObj(i -> DistributedLockRegistry.builder()
+                        .repository(repository)
+                        .retryer(retryer)
+                        .refreshLockInterval(properties.getRefreshLockInterval())
+                        .deadLockTimeout(properties.getDeadLockTimeout())
+                        .build())
                 .toArray(DistributedLockRegistry[]::new);
     }
 
@@ -288,7 +313,7 @@ abstract class DistributedLockRegistryTest {
             log.info("Start execute task {}", value);
             singletonQueue.add(value);
             assertThat(lock.isHeldByCurrentProcess()).as("lock %s, value=%s", lock, value).isTrue();
-            sleep(RandomUtils.secure().randomLong(MIN_TIME, MAX_TIME));
+            sleep(RandomUtils.insecure().randomLong(taskMinTime, taskMaxTime)); // simulate processing
             log.info("End execute task {}", singletonQueue.element());
             return singletonQueue.remove();
         } catch (InterruptedException ie) {
@@ -333,7 +358,7 @@ abstract class DistributedLockRegistryTest {
 
         @Bean
         public ThreadPoolTaskExecutor taskExecutor() {
-            return new TaskExecutorBuilder().corePoolSize(4).maxPoolSize(4).build();
+            return new TaskExecutorBuilder().corePoolSize(8).maxPoolSize(32).build();
         }
     }
 

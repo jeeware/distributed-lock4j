@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2025 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,7 +15,7 @@ package io.github.jeeware.cloud.lock4j.support;
 
 import io.github.jeeware.cloud.lock4j.BackoffStrategy;
 import io.github.jeeware.cloud.lock4j.Retryer;
-import org.apache.commons.lang3.ObjectUtils;
+import io.github.jeeware.cloud.lock4j.util.Utils;
 
 import java.time.Duration;
 import java.util.Random;
@@ -78,9 +78,8 @@ public class RandomBackoffStrategy implements BackoffStrategy {
             return this;
         }
 
-        @SuppressWarnings("deprecation")
         public RandomBackoffStrategy build() {
-            return new RandomBackoffStrategy(ObjectUtils.defaultIfNull(random, new Random()), minSleepInMillis, maxSleepInMillis);
+            return new RandomBackoffStrategy(Utils.getIfNull(random, Random::new), minSleepInMillis, maxSleepInMillis);
         }
 
     }

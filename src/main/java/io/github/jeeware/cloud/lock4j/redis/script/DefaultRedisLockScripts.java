@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -58,7 +58,7 @@ public class DefaultRedisLockScripts implements RedisLockScripts {
     }
 
     @Override
-    public RedisScript<Long> refreshActiveLocks() {
+    public RedisScript<Long> refreshActiveLock() {
         return fromPath(REFRESH_ACTIVE_LOCKS_PATH);
     }
 

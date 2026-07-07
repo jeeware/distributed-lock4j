@@ -22,7 +22,8 @@ public enum SQLDialects implements SQLDialect {
         public String getLock() {
             return "insert into %s as l (id, state, locked_at, locked_by, lock_heartbeat_at) values (?, ?, ?, ?, ?) " +
                     "on conflict (id) do " +
-                    "update set state = ?, locked_at = ?, locked_by = ?, lock_heartbeat_at = ? where l.state = ?";
+                    "update set state = ?, locked_at = ?, unlocked_at = null, locked_by = ?, lock_heartbeat_at = ? " +
+                    "where l.state = ?";
         }
 
         @Override
@@ -36,17 +37,34 @@ public enum SQLDialects implements SQLDialect {
             return "merge into %s l using (values (?, ?, ?, ?, ?)) v (id, state, locked_at, locked_by, lock_heartbeat_at) " +
                     "on l.id = v.id " +
                     "when not matched then " +
-                    "   insert (id, state, locked_at, locked_by, lock_heartbeat_at) " +
-                    "   values (v.id, v.state, v.locked_at, v.locked_by, v.lock_heartbeat_at) " +
+                    "insert (id, state, locked_at, locked_by, lock_heartbeat_at) " +
+                    "values (v.id, v.state, v.locked_at, v.locked_by, v.lock_heartbeat_at) " +
                     "when matched and l.state = ? then " +
-                    "   update set state = v.state, locked_at = v.locked_at, locked_by = v.locked_by, " +
-                    "   lock_heartbeat_at = v.lock_heartbeat_at";
+                    "update set state = v.state, locked_at = v.locked_at, unlocked_at = null, locked_by = v.locked_by, " +
+                    "lock_heartbeat_at = v.lock_heartbeat_at";
+        }
+
+        @Override
+        public String getLockWithClockSkew() {
+            return "merge into %s l using (values (?, ?, ?, ?, ?)) v (id, state, locked_at, locked_by, lock_heartbeat_at) " +
+                    "on l.id = v.id " +
+                    "when not matched then " +
+                    "insert (id, state, locked_at, locked_by, lock_heartbeat_at) " +
+                    "values (v.id, v.state, v.locked_at, v.locked_by, v.lock_heartbeat_at) " +
+                    "when matched and l.state = ? and (l.locked_at < ? or l.locked_at > ?) then " +
+                    "update set state = v.state, locked_at = v.locked_at, unlocked_at = null, locked_by = v.locked_by, " +
+                    "lock_heartbeat_at = v.lock_heartbeat_at";
         }
     },
     MYSQL {
         @Override
         public String getLock() {
-            return "{? = call %s (?, ?, ?, ?, ?)}";
+            return "{? = call %s (?, ?, ?, ?, ?, ?)}";
+        }
+
+        @Override
+        public String getLockWithClockSkew() {
+            return getLock();
         }
 
         @Override

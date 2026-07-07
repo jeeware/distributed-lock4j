@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Hichem BOURADA and other authors.
+ * Copyright 2020-2026 Hichem BOURADA and other authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,6 +13,7 @@
 
 package io.github.jeeware.cloud.lock4j;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 
 /**
@@ -25,4 +26,13 @@ public interface DistributedLock extends Lock {
 
     boolean isHeldByCurrentProcess();
 
+    /**
+     * Attempts to acquire the distributed lock unless the delta between the last lock timestamp and now
+     * is less than clockSkew.
+     *
+     * @param clockSkew clock skew or time difference between instances
+     * @param unit      the time unit of the clockSkew
+     * @return {@code true} if the lock was acquired, {@code false} otherwise
+     */
+    boolean tryLockWithClockSkew(long clockSkew, TimeUnit unit);
 }

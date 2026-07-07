@@ -13,7 +13,7 @@ SET GLOBAL log_bin_trust_function_creators = ON;;
 DROP FUNCTION IF EXISTS `@@function@@`;;
 
 CREATE FUNCTION `@@function@@`(lock_id VARCHAR(255), updated_by VARCHAR(255), updated_at BIGINT,
-                                unlocked_state NUMERIC(1), locked_state NUMERIC(1))
+                                unlocked_state NUMERIC(1), locked_state NUMERIC(1), clock_skew BIGINT)
     RETURNS INT
     MODIFIES SQL DATA
 BEGIN
@@ -25,9 +25,11 @@ BEGIN
         UPDATE `@@table@@`
         SET state             = locked_state,
             locked_at         = updated_at,
+            unlocked_at       = null,
             locked_by         = updated_by,
             lock_heartbeat_at = updated_at
-        WHERE id = lock_id AND state = unlocked_state;
+        WHERE id = lock_id AND state = unlocked_state
+                  and (clock_skew <= 0 or locked_at < updated_at - clock_skew or locked_at > updated_at + clock_skew);
         SELECT ROW_COUNT() INTO modified_count;
     END IF;
 
