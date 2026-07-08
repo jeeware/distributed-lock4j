@@ -3,12 +3,17 @@ A distributed _reentrant lock_ implementation based on a shared SQL or NoSQL dat
 
 This library can be used in a Spring Boot or vanilla applications (i.e., without Spring)
 
-A Spring Boot Auto-configurer is provided to ease its use.
+A Spring Boot Auto-configurer is provided to ease its use unlike ShedLock.
 
 This distributed lock can be used to implement _distributed scheduled tasks_ on a multi-instances microservice.
 
 You can customize default behavior by overriding configuration in your `application.properties` 
-or `application.yml` or defining your custom `LockRepository` bean for a particular database. 
+or `application.yml` or defining your custom `LockRepository` bean for a particular database.
+
+Spring annotation `@DistributedLock` accept placeholder expression (`${...}`), duration expression with suffixes (10ns, 3600ms or 2d), ISO-8601 format (PT10S) 
+or a simple number value for simple duration in milliseconds for attributes `timeout` and `clockSkew`.
+
+The default mode `@DistributedLock.Mode.DEFAULT` can deduce the best lock mode according to the annotation use context.
 
 #### Spring Boot sample for a scheduled job using SQL database:
 Add dependency in your build tool (like maven)
@@ -17,7 +22,7 @@ Add dependency in your build tool (like maven)
 <dependency>
     <groupId>io.github.jeeware</groupId>
     <artifactId>distributed-lock4j</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
 </dependency>
 ```
 Add annotation in your code
@@ -42,9 +47,9 @@ class MyScheduledJobs {
   // ....
 
   @Scheduled(fixedRate = 60_000)
-  @DistributedLock(mode = Mode.TRY_LOCK)
+  @DistributedLock(clockSkew = "2s")
   public void doEachOneMinute() {
-    // Only one instance executes this task at a given period
+    // Only one instance executes this task at a given period and with a clock skew (time diff tolerate) of 2 seconds
     // ....
   }
 }
@@ -74,6 +79,8 @@ cloud:
 ```java
 package io.github.jeeware.demo;
 
+import io.github.jeeware.cloud.lock4j.DistributedLock;
+import io.github.jeeware.cloud.lock4j.DistributedLockRegistry;
 import io.github.jeeware.cloud.lock4j.jdbc.JdbcInitializingLockRepository;
 import io.github.jeeware.cloud.lock4j.jdbc.SQLDialects;
 import io.github.jeeware.cloud.lock4j.support.RandomBackoffStrategy;
@@ -95,7 +102,7 @@ public class ScheduledJobApplication {
     lockRepository.initialize(); // create necessary lock tables and functions
     BackoffStrategy backoffStrategy = RandomBackoffStrategy.builder().maxSleepDuration(Duration.ofSeconds(5)).build();
     Retryer retryer = SimpleRetryer.builder().maxRetry(3).retryableException(IOException.class).backoffStrategy(backoffStrategy).build();
-    try (DistributedLockRegistry lockRegistry = new DistributedLockRegistry(lockRepository, scheduler, retryer)) {
+    try (DistributedLockRegistry lockRegistry = DistributedLockRegistry.builder().repository(lockRepository).retryer(retryer).build()) {
       scheduler.scheduleAtFixedRate(() -> doEachOneMinute(lockRegistry), 0, 1, TimeUnit.MINUTES);
       // do whatever you want
     } finally {
@@ -112,7 +119,7 @@ public class ScheduledJobApplication {
 
   private static void doEachOneMinute(DistributedLockRegistry lockRegistry) {
     DistributedLock lock = lockRegistry.getLock("MyLockIdentifierName");
-    if (lock.tryLock()) {
+    if (lock.tryLockWithClockSkew(2, TimeUnit.SECONDS)) {
       try {
         // Repeated task executed by only one application instance
         // ....
